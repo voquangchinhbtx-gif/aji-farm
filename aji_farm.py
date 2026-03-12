@@ -142,6 +142,29 @@ if menu == "📊 Dashboard":
     st.header("📊 Trung tâm điều khiển")
 
     # BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
+    def get_weather():
+    """
+    Hàm lấy dữ liệu thời tiết dự phòng hoặc từ GPS.
+    Trả về: nhiệt độ, độ ẩm, và mã trạng thái (hoặc mô tả).
+    """
+    # Bạn có thể dùng tọa độ mặc định của Kim Long, Huế
+    lat, lon = 16.46, 107.59 
+    api_key = "YOUR_OPENWEATHERMAP_API_KEY" # Đảm bảo đã thay key thật
+    
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
+        res = requests.get(url, timeout=5).json()
+        
+        if res.get("cod") == 200:
+            t = res['main']['temp']
+            h = res['main']['humidity']
+            w = res['weather'][0]['description']
+            return t, h, w
+    except:
+        pass
+    
+    # Trả về giá trị mặc định nếu API lỗi để App không sập
+    return 25, 80, "không rõ"
     temp, humi, w_code = get_weather()
 
     c1, c2 = st.columns(2)
@@ -486,6 +509,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
