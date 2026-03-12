@@ -459,7 +459,7 @@ elif menu == "📷 AI Chẩn đoán bệnh":
             # Lọc Confidence an toàn với .get()
             reliable_preds = [p for p in predictions if p.get("confidence", 0) > 60]
             
-        if reliable_preds:
+    if reliable_preds:
     top = reliable_preds[0]
     # Lưu dữ liệu an toàn
     data["disease_map"].append({
@@ -480,6 +480,7 @@ elif menu == "📷 AI Chẩn đoán bệnh":
         confidence_val = p.get('confidence', 0)
         p_cols[i].metric(disease_name, f"{confidence_val}%")
             
+
 
 
 
