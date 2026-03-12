@@ -1,11 +1,10 @@
-import streamlit as st
-import pandas as pd
 import json
-import os
-import requests
-from datetime import datetime, date
+import re
+import pandas as pd
+from datetime import datetime
 from PIL import Image
 import google.generativeai as genai
+from streamlit_js_eval import get_geolocation
 
 # ==========================================
 # 1. CẤU HÌNH
@@ -429,6 +428,7 @@ elif menu == "📋 Quy trình & Nhắc nhở":
                     save_data(data)
                     st.success(f"Đã lưu: {p_choice} bón {s_choice}")
                     st.rerun()
+
 
 
 
