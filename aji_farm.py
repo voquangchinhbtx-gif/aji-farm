@@ -63,23 +63,23 @@ if loc and isinstance(loc, dict) and 'coords' in loc:
         lat = loc['coords'].get('latitude')
         lon = loc['coords'].get('longitude')
         
-        if lat and lon:
-            # 4. Gọi API thời tiết (Có thêm timeout để tránh treo App)
+if lat and lon:
+# 4. Gọi API thời tiết (Có thêm timeout để tránh treo App)
             weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
             response = requests.get(weather_url, timeout=5)
             weather_data = response.json()
             
-            # Kiểm tra xem API trả về kết quả thành công không (status code 200)
-            if weather_data.get("cod") == 200:
+# Kiểm tra xem API trả về kết quả thành công không (status code 200)
+if weather_data.get("cod") == 200:
                 city_name = weather_data.get("name", city_name)
                 temp = weather_data['main']['temp']
                 humidity = weather_data['main']['humidity']
                 description = weather_data['weather'][0]['description']
                 st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
-            else:
+else:
                 st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
     except Exception as e:
-        # Nếu có bất kỳ lỗi phát sinh nào, App vẫn chạy tiếp với giá trị mặc định
+# Nếu có bất kỳ lỗi phát sinh nào, App vẫn chạy tiếp với giá trị mặc định
         st.sidebar.info("🔄 Đang cập nhật tọa độ...")
 else:
     st.sidebar.warning("📡 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
@@ -92,26 +92,26 @@ else:
 def get_alerts(temp, humi, w_code, plants):
     alerts = []
 
-    # Kiểm tra mã mưa (Các mã từ 51 đến 99 là có mưa)
-    if w_code >= 51:
+# Kiểm tra mã mưa (Các mã từ 51 đến 99 là có mưa)
+if w_code >= 51:
         alerts.append("🌧️ **TRỜI ĐANG MƯA:** Kiểm tra thoát nước gốc, tránh để ớt úng rễ!")
         alerts.append("🚨 **NẤM BỆNH:** Sau mưa cần kiểm tra nấm trắng trên lá!")
 
-    if temp > 33:
+if temp > 33:
         alerts.append("🌡️ Nắng nóng mạnh — cần che lưới")
     
-    if temp > 30 and humi < 60:
+if temp > 30 and humi < 60:
         alerts.append("🚨 Nguy cơ bọ trĩ cao")
 
-    if temp > 28 and humi > 85 and w_code < 51: # Độ ẩm cao mà không mưa
+if temp > 28 and humi > 85 and w_code < 51: # Độ ẩm cao mà không mưa
         alerts.append("🚨 Nguy cơ nấm bệnh do độ ẩm cao")
 
-    # (Giữ nguyên phần nhắc bón phân cũ bên dưới...)
+# (Giữ nguyên phần nhắc bón phân cũ bên dưới...)
     for p in plants:
         try:
             d = datetime.strptime(p["date"], "%Y-%m-%d").date()
             age = (date.today() - d).days
-            if age > 0 and age % 15 == 0:
+if age > 0 and age % 15 == 0:
                 alerts.append(f"🌿 {p['name']} {age} ngày: bón phân hữu cơ")
         except: pass
 
@@ -141,13 +141,13 @@ if menu == "📊 Dashboard":
 
     st.header("📊 Trung tâm điều khiển")
 
-    # BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
+# BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
 def get_weather():
     """
     Hàm lấy dữ liệu thời tiết dự phòng hoặc từ GPS.
     Trả về: nhiệt độ, độ ẩm, và mã trạng thái (hoặc mô tả).
     """
-    # Bạn có thể dùng tọa độ mặc định của Kim Long, Huế
+# Bạn có thể dùng tọa độ mặc định của Kim Long, Huế
     lat, lon = 16.46, 107.59 
     api_key = "YOUR_OPENWEATHERMAP_API_KEY" # Đảm bảo đã thay key thật
     
@@ -155,7 +155,7 @@ def get_weather():
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
         res = requests.get(url, timeout=5).json()
         
-        if res.get("cod") == 200:
+if res.get("cod") == 200:
             t = res['main']['temp']
             h = res['main']['humidity']
             w = res['weather'][0]['description']
@@ -163,7 +163,7 @@ def get_weather():
     except:
         pass
     
-    # Trả về giá trị mặc định nếu API lỗi để App không sập
+# Trả về giá trị mặc định nếu API lỗi để App không sập
     return 25, 80, "không rõ"
     temp, humi, w_code = get_weather()
 
@@ -172,12 +172,12 @@ def get_weather():
     c1.metric("Nhiệt độ", f"{temp}°C")
     c2.metric("Độ ẩm", f"{humi}%")
 
-    # Hiển thị biểu tượng thời tiết dựa trên mã w_code
-    if w_code >= 51:
+# Hiển thị biểu tượng thời tiết dựa trên mã w_code
+if w_code >= 51:
         st.info("🌧️ Hiện tại Kim Long đang có mưa")
-    elif w_code == 0:
+elif w_code == 0:
         st.info("☀️ Trời đang nắng đẹp")
-    else:
+else:
         st.info("☁️ Trời nhiều mây")
 
     st.divider()
@@ -193,13 +193,13 @@ def get_weather():
 
     st.subheader("Cảnh báo hôm nay")
 
-    # Gửi thêm w_code vào hàm cảnh báo
+# Gửi thêm w_code vào hàm cảnh báo
     alerts = get_alerts(temp, humi, w_code, data["plants"])
 
-    if alerts:
+if alerts:
         for a in alerts:
             st.warning(a)
-    else:
+else:
         st.success("Vườn đang ổn định")
 # ==========================================
 # 8. QUẢN LÝ CÂY
@@ -207,16 +207,16 @@ def get_weather():
 elif menu == "🌱 Quản lý cây":
     st.header("🌱 Danh sách cây")
 
-    # --- 1. Form thêm cây mới ---
+# --- 1. Form thêm cây mới ---
     with st.form("add_plant"):
         name = st.text_input("Tên cây / chậu")
-        # Đảm bảo đầu file có: from datetime import date
+# Đảm bảo đầu file có: from datetime import date
         d = st.date_input("Ngày trồng", value=date.today())
         
-        # PHẢI có nút Submit button bên trong Form
+# PHẢI có nút Submit button bên trong Form
         submitted = st.form_submit_button("Thêm cây mới")
         
-        if submitted and name:
+if submitted and name:
             data["plants"].append({
                 "name": name,
                 "date": str(d)
@@ -227,22 +227,22 @@ elif menu == "🌱 Quản lý cây":
 
     st.divider()
 
-    # --- 2. Hiển thị danh sách cây hiện có ---
-    # Kiểm tra nếu có dữ liệu plants
-    if data.get("plants"):
+# --- 2. Hiển thị danh sách cây hiện có ---
+# Kiểm tra nếu có dữ liệu plants
+if data.get("plants"):
         for i, p in enumerate(data["plants"]):
-            # Ép kiểu datetime để tính số ngày tuổi
+# Ép kiểu datetime để tính số ngày tuổi
             d_obj = datetime.strptime(p["date"], "%Y-%m-%d").date()
             age = (date.today() - d_obj).days
             
             c1, c2 = st.columns([4, 1])
             c1.write(f"**{p['name']}** — {age} ngày tuổi")
             
-            if c2.button("Xóa", key=f"del_{i}"):
+if c2.button("Xóa", key=f"del_{i}"):
                 data["plants"].pop(i)
                 save_data(data)
                 st.rerun()
-    else:
+else:
         st.info("Chưa có cây nào trong danh sách. Hãy thêm cây ở phía trên!")
 
 # ==========================================
@@ -512,6 +512,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
