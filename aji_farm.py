@@ -362,84 +362,124 @@ elif menu == "📦 Kho vật tư":
     else:
         st.info("Chưa có loại phân thuốc nào trong kho.")
 # ==========================================
-# 13. QUY TRÌNH & TỐI ƯU HÓA (BẢN BIẾT NÓI)
+# 13. DỰ BÁO DỊCH TỄ HỌC NÔNG NGHIỆP
 # ==========================================
-elif menu == "📋 Quy trình & Nhắc nhở":
-    st.header("📋 Quy trình & Tối ưu hóa phân bón")
+if menu == "📋 Quy trình & Nhắc nhở":
+    st.header("🔮 Hệ thống Dự báo & Phân tích Dịch tễ")
 
-    tab_guide, tab_task = st.tabs(["📖 Sổ tay & Nhật ký", "🔔 Nhắc việc của tôi"])
+    # GPS & THỜI TIẾT CACHED
+    loc = get_geolocation()
+    lat, lon = (loc['coords']['latitude'], loc['coords']['longitude']) if loc else (16.46, 107.59)
+    
+    try:
+        w_res = get_weather(lat, lon, API_KEY_WEATHER)
+        temp, humidity, desc = w_res['main']['temp'], w_res['main']['humidity'], w_res['weather'][0]['description']
+        city = w_res.get("name", "Kim Long")
+    except:
+        temp, humidity, desc, city = 25, 80, "Không có dữ liệu", "Vị trí hiện tại"
 
-    with tab_guide:
-        st.info("💡 Hệ thống tổng hợp kinh nghiệm từ cộng đồng để đưa ra loại phân bón hiệu quả nhất.")
+    # RISK SCORE THÔNG MINH
+    risk_score = 0
+    if humidity > 90: risk_score += 2
+    elif humidity > 80: risk_score += 1
+    if "mưa" in desc.lower(): risk_score += 1
+    if temp > 34: risk_score += 1
+
+    # DASHBOARD TỔNG QUAN
+    st.subheader(f"📊 Dashboard Vườn: {city}")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Chỉ số nguy cơ", f"{risk_score}/4")
+    m2.metric("Nhiệt độ", f"{temp}°C")
+    m3.metric("Độ ẩm", f"{humidity}%")
+    
+    # CẢNH BÁO MẠNH THEO RISK SCORE
+    if risk_score >= 3:
+        st.error("🚨 **Nguy cơ bùng phát dịch bệnh cao** – Cần kiểm tra vườn ngay lập tức.")
+    elif risk_score == 2:
+        st.warning("⚠️ **Điều kiện thuận lợi** cho bệnh phát sinh. Hãy phun phòng hữu cơ.")
+    else:
+        st.success("✅ **Điều kiện ổn định.** Tiếp tục duy trì chế độ chăm sóc.")
+
+    # PHÂN TÍCH DỮ LIỆU LỊCH SỬ (HEATMAP & TIME-SERIES)
+    if data["disease_map"]:
+        df_map = pd.DataFrame(data["disease_map"])
+        df_map["date"] = pd.to_datetime(df_map["date"])
         
-        # 1. Thu thập dữ liệu từ kho cộng đồng
-        all_supplies = data.get("supplies", [])
-        all_names = [s['name'] for s in all_supplies]
-
-        # 2. Danh mục quy trình - Nơi chứa "Kiến thức thực tế"
-        standard_guides = [
-            {
-                "Giai đoạn": "🌱 Cây con (1-30 ngày)",
-                "Từ khóa": ["rễ", "chuối", "humic"],
-                "HD": "Pha 5ml/1L nước. Tưới gốc lúc 6h-7h sáng để kích rễ mạnh.",
-                "Mặc định": "Dịch chuối"
-            },
-            {
-                "Giai đoạn": "🌿 Phát triển (30-60 ngày)",
-                "Từ khóa": ["đạm", "lá", "cá", "tăng trưởng"],
-                "HD": "Pha 1:200. Phun mặt dưới lá định kỳ 10 ngày để vươn cành.",
-                "Mặc định": "Đạm cá"
-            },
-            {
-                "Giai đoạn": "🌼 Ra hoa (60-90 ngày)",
-                "Từ khóa": ["hoa", "bông", "trứng", "sữa", "canxi"],
-                "HD": "Phun trực tiếp vào chùm hoa lúc chưa nở. Giúp chống rụng bông.",
-                "Mặc định": "Dịch Trứng Sữa"
-            },
-            {
-                "Giai đoạn": "🛡️ Phòng bệnh",
-                "Từ khóa": ["nấm", "khuẩn", "nano", "bạc", "trĩ"],
-                "HD": "Xịt ngay sau mưa dầm. Ngăn ngừa nấm thán thư Kim Long.",
-                "Mặc định": "Nano Bạc"
-            }
-        ]
-
-        # 3. Logic Phân tích & Hiển thị
-        refined_data = []
-        for g in standard_guides:
-            # Tìm loại phân phổ biến nhất dựa trên dữ liệu cộng đồng (all_names)
-            matching_items = [n for n in all_names if any(k in n.lower() for k in g["Từ khóa"])]
-            
-            # Loại phân hiệu quả nhất dựa trên số đông người dùng
-            most_common = max(set(matching_items), key=matching_items.count) if matching_items else g["Mặc định"]
-            
-            # Kiểm tra trạng thái kho cá nhân của bạn
-            my_stock = "✅ Đã có" if matching_items else "❌ Cần mua"
-
-            refined_data.append({
-                "Giai đoạn": g["Giai đoạn"],
-                "Hướng dẫn kỹ thuật (Cụ thể)": g["HD"],
-                "Loại phân tối ưu (Số đông tin dùng)": most_common,
-                "Trạng thái kho": my_stock
-            })
-
-        # Hiển thị bảng phân tích
-        st.table(refined_data)
-
-        # 4. Phần thực hiện bón (Nhật ký)
         st.divider()
-        st.subheader("🚀 Xác nhận bón phân / Phun thuốc")
-        if all_supplies:
-            with st.form("action_v4"):
-                c1, c2 = st.columns(2)
-                p_choice = c1.selectbox("Bón cho cây", ["Tất cả vườn"] + [p['name'] for p in data.get('plants', [])])
-                s_choice = c2.selectbox("Loại phân thực tế sử dụng", all_names)
-                if st.form_submit_button("Ghi nhận thực hiện"):
-                    if "care_history" not in data: data["care_history"] = []
-                    data["care_history"].append({"plant": p_choice, "supply": s_choice, "date": str(date.today())})
-                    save_data(data)
-                    st.success(f"Đã lưu: {p_choice} bón {s_choice}")
-                    st.rerun()
+        tab1, tab2, tab3 = st.tabs(["🗺️ Bản đồ ổ bệnh", "📈 Diễn biến dịch", "📊 Thống kê cây"])
+        
+        with tab1:
+            # Chuẩn hóa dữ liệu map
+            clean_map = df_map.dropna(subset=["lat", "lon"])
+            st.map(clean_map[["lat", "lon"]])
+        
+        with tab2:
+            st.write("📅 **Số ca bệnh theo ngày**")
+            cases_by_day = df_map.groupby(df_map["date"].dt.date).size()
+            st.line_chart(cases_by_day)
+        
+        with tab3:
+            c1, c2 = st.columns(2)
+            c1.write("🔥 **Bệnh phổ biến**")
+            c1.bar_chart(df_map["disease"].value_counts())
+            c2.write("🌱 **Cây bị nhiễm**")
+            c2.bar_chart(df_map["plant"].value_counts())
+
+# ==========================================
+# 14. AI CHẨN ĐOÁN (ROBUST VISION AI)
+# ==========================================
+elif menu == "📷 AI Chẩn đoán bệnh":
+    st.header("🔬 AI Chẩn đoán & Ghi nhận Thực địa")
+    
+    loc_ai = get_geolocation()
+    lat_ai, lon_ai = (loc_ai['coords']['latitude'], loc_ai['coords']['longitude']) if loc_ai else (0, 0)
+
+    img_file = st.camera_input("📸 Chụp ảnh bộ phận nghi ngờ bệnh")
+
+    if img_file:
+        image = Image.open(img_file)
+        st.image(image, caption="Ảnh hiện trường", use_column_width=True)
+
+        with st.spinner("🤖 AI đang phân tích đa tầng..."):
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash")
+                prompt = """Trả về DUY NHẤT JSON list 3 bệnh khả năng cao nhất cho cây trồng trong ảnh:
+                [{"plant":"Tên cây","disease":"Tên bệnh","confidence":80,"organic_guide":"Hướng dẫn hữu cơ","source":"FAO/CABI"}]
+                Chỉ dùng giải pháp sinh học/hữu cơ."""
+                response = model.generate_content([prompt, image])
+                
+                # Regex & Try-Except an toàn tuyệt đối
+                try:
+                    match = re.search(r'\[.*\]', response.text, re.DOTALL)
+                    predictions = json.loads(match.group()) if match else []
+                except: predictions = []
+            except: predictions = []
+
+        if predictions:
+            # Lọc Confidence an toàn với .get()
+            reliable_preds = [p for p in predictions if p.get("confidence", 0) > 60]
+            
+            if reliable_preds:
+    top = reliable_preds[0]
+    # Lưu dữ liệu an toàn
+    data["disease_map"].append({
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "plant": top.get("plant", "Không rõ"),
+        "disease": top.get("disease", "Bệnh lạ"),
+        "lat": lat_ai, "lon": lon_ai
+    })
+    save_data(data)
+
+    st.success(f"✅ Nhận diện: {top.get('plant', 'Chưa rõ')} - {top.get('disease', 'Không rõ')}")
+    
+    # Hiển thị Top bệnh (Sửa lỗi hiển thị Metric theo ý bạn)
+    p_cols = st.columns(len(reliable_preds))
+    for i, p in enumerate(reliable_preds):
+        # Đảm bảo không bao giờ lỗi dù AI thiếu key
+        disease_name = p.get('disease', 'Không rõ')
+        confidence_val = p.get('confidence', 0)
+        p_cols[i].metric(disease_name, f"{confidence_val}%")
+            
 
 
 
