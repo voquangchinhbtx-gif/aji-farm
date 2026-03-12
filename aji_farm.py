@@ -76,7 +76,7 @@ if loc and isinstance(loc, dict) and 'coords' in loc:
                 humidity = weather_data['main']['humidity']
                 description = weather_data['weather'][0]['description']
                 st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
-except Exception as e:
+    except Exception as e:
                st.sidebar.warning("Không thể lấy vị trí GPS, đang dùng vị trí mặc định.")
                temp, humi, w_code = 25, 80, "Mây rải rác"
 else:
@@ -515,6 +515,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
