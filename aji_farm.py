@@ -218,16 +218,14 @@ if menu == "📊 Dashboard":
 elif menu == "🌱 Quản lý cây":
     st.header("🌱 Danh sách cây")
 
-# --- 1. Form thêm cây mới ---
+    # --- 1. Form thêm cây mới ---
     with st.form("add_plant"):
         name = st.text_input("Tên cây / chậu")
-# Đảm bảo đầu file có: from datetime import date
         d = st.date_input("Ngày trồng", value=date.today())
-        
-# PHẢI có nút Submit button bên trong Form
+
         submitted = st.form_submit_button("Thêm cây mới")
-        
-if submitted and name:
+
+        if submitted and name:
             data["plants"].append({
                 "name": name,
                 "date": str(d)
@@ -238,24 +236,25 @@ if submitted and name:
 
     st.divider()
 
-# --- 2. Hiển thị danh sách cây hiện có ---
-# Kiểm tra nếu có dữ liệu plants
-if data.get("plants"):
+    # --- 2. Hiển thị danh sách cây ---
+    if data.get("plants"):
         for i, p in enumerate(data["plants"]):
-# Ép kiểu datetime để tính số ngày tuổi
+
+            # Tính tuổi cây
             d_obj = datetime.strptime(p["date"], "%Y-%m-%d").date()
             age = (date.today() - d_obj).days
-            
-            c1, c2 = st.columns([4, 1])
+
+            c1, c2 = st.columns([4,1])
+
             c1.write(f"**{p['name']}** — {age} ngày tuổi")
-            
-if c2.button("Xóa", key=f"del_{i}"):
+
+            if c2.button("Xóa", key=f"del_{i}"):
                 data["plants"].pop(i)
                 save_data(data)
                 st.rerun()
-else:
-        st.info("Chưa có cây nào trong danh sách. Hãy thêm cây ở phía trên!")
 
+    else:
+        st.info("Chưa có cây nào trong danh sách. Hãy thêm cây ở phía trên!")
 # ==========================================
 # 9. AI CHẨN ĐOÁN
 # ==========================================
@@ -523,6 +522,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
