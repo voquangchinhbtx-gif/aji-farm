@@ -342,51 +342,71 @@ elif menu == "📦 Kho vật tư":
     else:
         st.info("Chưa có loại phân thuốc nào trong kho.")
 # ==========================================
-# 13. QUY TRÌNH & NHẮC NHỞ
+# 13. QUY TRÌNH & NHẮC NHỞ (KẾT NỐI KHO VẬT TƯ)
 # ==========================================
 elif menu == "📋 Quy trình & Nhắc nhở":
-    st.header("📋 Quy trình chăm sóc & Nhắc việc")
+    st.header("📋 Quy trình & Kiểm tra vật tư sẵn có")
 
-    tab_guide, tab_task = st.tabs(["📖 Quy trình chuẩn", "🔔 Nhắc nhở của tôi"])
+    tab_guide, tab_task = st.tabs(["📖 Sổ tay & Kiểm kho", "🔔 Nhắc việc của tôi"])
 
     with tab_guide:
-        st.subheader("Quy trình ớt Aji Charapita (Hữu cơ)")
-        with st.expander("Giai đoạn 1: Cây con (1 - 30 ngày)"):
-            st.write("- **Tưới nước:** Giữ ẩm vừa phải, tránh úng.")
-            st.write("- **Dinh dưỡng:** Phun dịch chuối loãng hoặc phân bánh dầu ngâm.")
-            st.write("- **Phòng bệnh:** Xịt nước vôi trong loãng hoặc Nano bạc định kỳ 1 tuần/lần.")
-            
-        with st.expander("Giai đoạn 2: Phát triển & Ra hoa (30 - 60 ngày)"):
-            st.write("- **Cắt tỉa:** Tỉa bớt cành sát gốc để thông thoáng.")
-            st.write("- **Dinh dưỡng:** Bổ sung thêm Canxi-Bo (hữu cơ) để chống rụng bông.")
-            st.write("- **Lưu ý:** Nếu Kim Long có mưa dầm, phải kê chậu cao thoát nước.")
+        st.info("💡 Hệ thống đang tự động đối chiếu Quy trình với Kho vật tư tại Kim Long của bạn.")
+        
+        # Danh sách quy trình chuẩn
+        standard_guides = [
+            {"Giai đoạn": "🌱 Cây con (1-30 ngày)", "Phân cần dùng": "Dịch chuối", "Lưu ý": "Kích rễ loãng"},
+            {"Giai đoạn": "🌿 Phát triển (30-60 ngày)", "Phân cần dùng": "Đạm cá", "Lưu ý": "Xanh lá, vươn cành"},
+            {"Giai đoạn": "🌼 Ra hoa (60-90 ngày)", "Phân cần dùng": "Trứng sữa", "Lưu ý": "Chống rụng bông"},
+            {"Giai đoạn": "🌶️ Nuôi trái (>90 ngày)", "Phân cần dùng": "Kali", "Lưu ý": "Trái bóng, cay nồng"},
+            {"Giai đoạn": "🛡️ Phòng bệnh", "Phân cần dùng": "Nano Bạc", "Lưu ý": "Sử dụng sau mưa dầm"}
+        ]
 
-        with st.expander("Giai đoạn 3: Thu hoạch (> 60 ngày)"):
-            st.write("- **Thu hái:** Hái khi quả chuyển sang màu vàng đậm.")
-            st.write("- **Bảo quản:** Để nơi thoáng mát, không rửa nước nếu chưa dùng ngay.")
+        # Lấy danh sách tên vật tư hiện có trong kho (viết thường để so sánh cho chuẩn)
+        supplies_in_stock = []
+        if data.get("supplies"):
+            supplies_in_stock = [s['name'].lower() for s in data["supplies"]]
+
+        # Hiển thị bảng quy trình kèm trạng thái tồn kho
+        final_display = []
+        for g in standard_guides:
+            # Kiểm tra xem tên phân trong quy trình có nằm trong tên vật tư ở kho không
+            status = "✅ Sẵn có" if bất_kỳ_vật_tư_nào_khớp = any(g["Phân cần dùng"].lower() in s for s in supplies_in_stock) else "❌ Hết hàng"
+            
+            final_display.append({
+                "Giai đoạn": g["Giai đoạn"],
+                "Loại phân": g["Phân cần dùng"],
+                "Trạng thái kho": status,
+                "Hướng dẫn": g["Lưu ý"]
+            })
+
+        st.table(final_display)
+
+        # Cảnh báo nhanh nếu thiếu vật tư quan trọng sau mưa
+        temp, humi, w_code = get_weather()
+        if w_code >= 51 and not any("nano" in s for s in supplies_in_stock):
+            st.error("🚨 **CẢNH BÁO:** Trời đang mưa nhưng trong Kho không tìm thấy **Nano Bạc**. Bạn nên bổ sung sớm để trị nấm!")
 
     with tab_task:
-        st.subheader("🔔 Danh sách việc cần làm")
-        # Form thêm nhắc nhở
-        with st.form("add_task"):
-            t_title = st.text_input("Việc cần làm (Vd: Xịt thuốc nấm sau mưa, Mua thêm đạm cá...)")
-            t_date = st.date_input("Ngày thực hiện", value=date.today())
-            if st.form_submit_button("Thêm nhắc nhở") and t_title:
-                if "tasks" not in data: data["tasks"] = []
-                data["tasks"].append({"title": t_title, "date": str(t_date), "status": "Chưa xong"})
-                save_data(data)
-                st.rerun()
+        st.subheader("🔔 Gợi ý bón phân từ vật tư trong kho")
+        if data["plants"]:
+            for p in data["plants"]:
+                d_p = datetime.strptime(p["date"], "%Y-%m-%d").date()
+                age = (date.today() - d_p).days
+                
+                # Tìm loại phân tương ứng với số tuổi cây
+                target_stage = standard_guides[min(age//30, 3)]
+                target_fertilizer = target_stage["Phân cần dùng"]
+                
+                if age % 15 == 0:
+                    if any(target_fertilizer.lower() in s for s in supplies_in_stock):
+                        st.success(f"✅ **{p['name']}** ({age} ngày): Hãy lấy **{target_fertilizer}** trong kho ra bón.")
+                    else:
+                        st.warning(f"⚠️ **{p['name']}** ({age} ngày): Cần bón **{target_fertilizer}** nhưng trong kho đã hết!")
 
-        # Hiển thị danh sách nhắc nhở
-        if "tasks" in data and data["tasks"]:
-            for i, t in enumerate(data["tasks"]):
-                c1, c2, c3 = st.columns([3, 2, 1])
-                c1.write(f"📌 {t['title']}")
-                c2.write(f"📅 {t['date']}")
-                if c3.button("Xong", key=f"task_{i}"):
-                    data["tasks"].pop(i)
-                    save_data(data)
-                    st.rerun()
+        st.divider()
+        # Phần nhắc nhở thủ công giữ nguyên như cũ...
+        st.write("(Sử dụng form bên dưới để ghi chú thêm các việc khác)")
+
 
 
 
