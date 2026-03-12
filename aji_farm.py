@@ -507,89 +507,84 @@ elif menu == "📦 Kho vật tư":
 # ==========================================
 # 13. DỰ BÁO DỊCH TỄ HỌC NÔNG NGHIỆP
 # ==========================================
+import streamlit as st
+import requests
+import pandas as pd  # ✅ Giải quyết thiếu import
+from streamlit_js_eval import get_geolocation
+
+# --- CẤU HÌNH BAN ĐẦU ---
+API_KEY_WEATHER = "66ad043d6024749fa4bf92f0a6782397"
+
+# Giả lập hoặc khởi tạo biến data để tránh NameError ✅
+if 'data' not in locals():
+    data = {"disease_map": []} 
+
 if menu == "📋 Quy trình & Nhắc nhở":
     st.header("🔮 Hệ thống Dự báo & Phân tích Dịch tễ")
 
-    # GPS & THỜI TIẾT CACHED
-    loc = get_geolocation(key='my_unique_gps')
-    def get_weather_data():
-    data = {
-        "temp": 25, "humi": 80, 
-        "desc": "Đang cập nhật...", 
-        "city": "Vườn Kim Long", "icon": "🌡️"
-    }
-
-    try:
-        # THÊM THAM SỐ key Ở ĐÂY
-        loc = get_geolocation(key='aji_farm_gps_location') 
-
-        if loc and isinstance(loc, dict) and "coords" in loc:
-            lat = loc["coords"].get("latitude")
-            lon = loc["coords"].get("longitude")
-
-            if lat and lon:
-                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
-                res = requests.get(url, timeout=5).json()
-
-                if res.get("cod") == 200:
-                    data["temp"] = res["main"]["temp"]
-                    data["humi"] = res["main"]["humidity"]
-                    desc = res["weather"][0]["description"].capitalize()
-                    data["city"] = res.get("name", "Vườn Kim Long")
-                    
-                    # Cập nhật icon
-                    if "mưa" in desc.lower(): data["icon"] = "🌧️"
-                    elif "mây" in desc.lower(): data["icon"] = "☁️"
-                    elif "nắng" in desc.lower(): data["icon"] = "☀️"
-                    
-                    data["desc"] = f"{data['icon']} {desc}"
-    except Exception as e:
-        st.sidebar.error(f"Lỗi GPS: {e}")
-        
-    return data
-    lat, lon = (loc['coords']['latitude'], loc['coords']['longitude']) if loc else (16.46, 107.59)
+    # 1. GPS & THỜI TIẾT (Xử lý an toàn)
+    loc = get_geolocation(key='gps_risk_analysis') # ✅ Dùng key duy nhất
     
-    try:
-        w_res = get_weather(lat, lon, API_KEY_WEATHER)
-        temp, humidity, desc = w_res['main']['temp'], w_res['main']['humidity'], w_res['weather'][0]['description']
-        city = w_res.get("name", "Kim Long")
-    except:
-        temp, humidity, desc, city = 25, 80, "Không có dữ liệu", "Vị trí hiện tại"
+    # Giá trị mặc định
+    temp, humidity, desc, city = 25, 80, "Không có dữ liệu", "Vị trí hiện tại"
 
-    # RISK SCORE THÔNG MINH
+    if loc and "coords" in loc:
+        lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
+        try:
+            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY_WEATHER}&units=metric&lang=vi"
+            res = requests.get(url, timeout=5) # ✅ Kiểm tra lỗi mạng
+            res.raise_for_status() 
+            w_data = res.json()
+            
+            if w_data.get("cod") == 200:
+                temp = w_data['main']['temp']
+                humidity = w_data['main']['humidity']
+                desc = w_data['weather'][0]['description']
+                city = w_data.get("name", "Kim Long")
+        except Exception as e:
+            st.sidebar.error(f"⚠️ Không thể cập nhật thời tiết: {e}")
+
+    # 2. RISK SCORE THÔNG MINH
     risk_score = 0
     if humidity > 90: risk_score += 2
     elif humidity > 80: risk_score += 1
     if "mưa" in desc.lower(): risk_score += 1
     if temp > 34: risk_score += 1
 
-    # DASHBOARD TỔNG QUAN
+    # 3. DASHBOARD TỔNG QUAN
     st.subheader(f"📊 Dashboard Vườn: {city}")
     m1, m2, m3 = st.columns(3)
-    m1.metric("Chỉ số nguy cơ", f"{risk_score}/4")
+    
+    # Hiển thị màu sắc theo mức độ nguy cơ ✅
+    risk_color = "normal" 
+    if risk_score >= 3: risk_color = "inverse"
+    
+    m1.metric("Chỉ số nguy cơ", f"{risk_score}/4", delta="NGUY HIỂM" if risk_score >= 3 else "AN TOÀN", delta_color=risk_color)
     m2.metric("Nhiệt độ", f"{temp}°C")
     m3.metric("Độ ẩm", f"{humidity}%")
     
-    # CẢNH BÁO MẠNH THEO RISK SCORE
+    # Cảnh báo trực quan
     if risk_score >= 3:
-        st.error("🚨 **Nguy cơ bùng phát dịch bệnh cao** – Cần kiểm tra vườn ngay lập tức.")
+        st.error("🚨 **CẢNH BÁO:** Điều kiện cực kỳ thuận lợi cho nấm bệnh (Thán thư, Phấn trắng). Cần phun phòng ngay!")
     elif risk_score == 2:
-        st.warning("⚠️ **Điều kiện thuận lợi** cho bệnh phát sinh. Hãy phun phòng hữu cơ.")
+        st.warning("⚠️ **CHÚ Ý:** Độ ẩm cao. Hãy tăng cường thông thoáng cho vườn ớt.")
     else:
-        st.success("✅ **Điều kiện ổn định.** Tiếp tục duy trì chế độ chăm sóc.")
+        st.success("✅ **AN TOÀN:** Thời tiết đang ủng hộ vườn ớt Aji Charapita của bạn.")
 
-    # PHÂN TÍCH DỮ LIỆU LỊCH SỬ (HEATMAP & TIME-SERIES)
-    if data["disease_map"]:
+    # 4. PHÂN TÍCH DỮ LIỆU LỊCH SỬ ✅
+    st.divider()
+    if data.get("disease_map"):
         df_map = pd.DataFrame(data["disease_map"])
         df_map["date"] = pd.to_datetime(df_map["date"])
         
-        st.divider()
         tab1, tab2, tab3 = st.tabs(["🗺️ Bản đồ ổ bệnh", "📈 Diễn biến dịch", "📊 Thống kê cây"])
         
         with tab1:
-            # Chuẩn hóa dữ liệu map
-            clean_map = df_map.dropna(subset=["lat", "lon"])
-            st.map(clean_map[["lat", "lon"]])
+            # Kiểm tra dữ liệu Map trước khi hiển thị ✅
+            if not df_map[['lat', 'lon']].dropna().empty:
+                st.map(df_map.dropna(subset=["lat", "lon"])[["lat", "lon"]])
+            else:
+                st.info("Chưa có tọa độ GPS cho các ổ bệnh ghi nhận.")
         
         with tab2:
             st.write("📅 **Số ca bệnh theo ngày**")
@@ -598,10 +593,12 @@ if menu == "📋 Quy trình & Nhắc nhở":
         
         with tab3:
             c1, c2 = st.columns(2)
-            c1.write("🔥 **Bệnh phổ biến**")
+            c1.write("🔥 **Loại bệnh**")
             c1.bar_chart(df_map["disease"].value_counts())
             c2.write("🌱 **Cây bị nhiễm**")
             c2.bar_chart(df_map["plant"].value_counts())
+    else:
+        st.info("ℹ️ Hệ thống chưa ghi nhận lịch sử dịch tễ. Các biểu đồ sẽ xuất hiện khi có dữ liệu bệnh hại.")
 
 # ==========================================
 # 14. AI CHẨN ĐOÁN (ROBUST VISION AI)
@@ -676,6 +673,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
