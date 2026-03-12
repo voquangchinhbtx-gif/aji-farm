@@ -168,13 +168,22 @@ def get_weather():
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
         res = requests.get(url, timeout=5).json()
         
-    if res.get("cod") == 200:
-            t = res['main']['temp']
-            h = res['main']['humidity']
-            w = res['weather'][0]['description']
+    def get_weather(lat, lon, api_key):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
+        res = requests.get(url, timeout=5).json()
+
+        if res.get("cod") == 200:
+            t = res["main"]["temp"]
+            h = res["main"]["humidity"]
+            w = res["weather"][0]["description"]
             return t, h, w
-    except:
+
+    except Exception:
         pass
+
+    # fallback nếu lỗi
+    return 25, 80, "không rõ"
     
 # Trả về giá trị mặc định nếu API lỗi để App không sập
     return 25, 80, "không rõ"
@@ -525,6 +534,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
