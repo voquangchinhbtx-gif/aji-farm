@@ -79,13 +79,13 @@ if loc and isinstance(loc, dict) and 'coords' in loc:
     except Exception as e:
                st.sidebar.warning("Không thể lấy vị trí GPS, đang dùng vị trí mặc định.")
                temp, humi, w_code = 25, 80, "Mây rải rác"
-else:
+    else:
                 st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
     except Exception as e:
 # Nếu có bất kỳ lỗi phát sinh nào, App vẫn chạy tiếp với giá trị mặc định
-        st.sidebar.info("🔄 Đang cập nhật tọa độ...")
-else:
-    st.sidebar.warning("📡 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
+                st.sidebar.info("🔄 Đang cập nhật tọa độ...")
+    else:
+                st.sidebar.warning("📡 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
 
 # Sau đoạn này, các biến temp, humidity luôn tồn tại, không lo lỗi ở các mục sau.
 
@@ -515,6 +515,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
