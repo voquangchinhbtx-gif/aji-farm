@@ -479,49 +479,76 @@ if menu == "📋 Quy trình & Nhắc nhở":
 # 14. AI CHẨN ĐOÁN (ROBUST VISION AI)
 # ==========================================
 elif menu == "📷 AI Chẩn đoán bệnh":
+
     st.header("🔬 AI Chẩn đoán & Ghi nhận Thực địa")
-    
+
     loc_ai = get_geolocation()
     lat_ai, lon_ai = (loc_ai['coords']['latitude'], loc_ai['coords']['longitude']) if loc_ai else (0, 0)
 
     img_file = st.camera_input("📸 Chụp ảnh bộ phận nghi ngờ bệnh")
 
     if img_file:
+
         image = Image.open(img_file)
         st.image(image, caption="Ảnh hiện trường", use_column_width=True)
 
         with st.spinner("🤖 AI đang phân tích đa tầng..."):
+
+            predictions = []
+            reliable_preds = []
+
             try:
                 model = genai.GenerativeModel("gemini-1.5-flash")
-                prompt = """Trả về DUY NHẤT JSON list 3 bệnh khả năng cao nhất cho cây trồng trong ảnh:
-                [{"plant":"Tên cây","disease":"Tên bệnh","confidence":80,"organic_guide":"Hướng dẫn hữu cơ","source":"FAO/CABI"}]
-                Chỉ dùng giải pháp sinh học/hữu cơ."""
-                response = model.generate_content([prompt, image])
-                
-                # Regex & Try-Except an toàn tuyệt đối
-                try:
-                    match = re.search(r'\[.*\]', response.text, re.DOTALL)
-                    predictions = json.loads(match.group()) if match else []
-                except: predictions = []
-            except: predictions = []
 
-        if predictions:
-            # Lọc Confidence an toàn với .get()
-            reliable_preds = [p for p in predictions if p.get("confidence", 0) > 60]
-            
-if reliable_preds:
-    # Dòng 463: Phải thụt vào 4 khoảng trắng so với 'if'
-    top = reliable_preds[0]
-    
-    # Các dòng này cũng phải thụt vào ĐÚNG bằng dòng 'top'
-    new_case = {
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "plant": top.get("plant", "Không rõ"),
-        "disease": top.get("disease", "Bệnh lạ"),
-        "lat": lat_ai, "lon": lon_ai
-    }
-    data["disease_map"].append(new_case)
-    save_data(data)
+                prompt = """
+Trả về DUY NHẤT JSON list 3 bệnh khả năng cao nhất cho cây trồng trong ảnh:
+
+[
+ {"plant":"Tên cây","disease":"Tên bệnh","confidence":80,"organic_guide":"Hướng dẫn hữu cơ","source":"FAO/CABI"}
+]
+
+Chỉ dùng giải pháp sinh học/hữu cơ.
+"""
+
+                response = model.generate_content([prompt, image])
+
+                # Tách JSON an toàn
+                match = re.search(r'\[.*\]', response.text, re.DOTALL)
+
+                if match:
+                    predictions = json.loads(match.group())
+
+            except Exception as e:
+                st.error("AI phân tích thất bại")
+
+        # Lọc kết quả đáng tin cậy
+        reliable_preds = [p for p in predictions if p.get("confidence", 0) > 60]
+
+        if reliable_preds:
+
+            st.success("✅ Tìm thấy bệnh có độ tin cậy cao")
+
+            top = reliable_preds[0]
+
+            st.write(f"🌿 Cây: {top.get('plant','Không rõ')}")
+            st.write(f"🦠 Bệnh: {top.get('disease','Không rõ')}")
+            st.write(f"📊 Độ tin cậy: {top.get('confidence',0)}%")
+            st.write(f"🌱 Giải pháp hữu cơ: {top.get('organic_guide','')}")
+
+            new_case = {
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "plant": top.get("plant", "Không rõ"),
+                "disease": top.get("disease", "Bệnh lạ"),
+                "lat": lat_ai,
+                "lon": lon_ai
+            }
+
+            data["disease_map"].append(new_case)
+            save_data(data)
+
+        else:
+            st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
