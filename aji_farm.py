@@ -81,7 +81,7 @@ if loc and isinstance(loc, dict) and 'coords' in loc:
                temp, humi, w_code = 25, 80, "Mây rải rác"
 else:
                 st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
-except Exception as e:
+    except Exception as e:
 # Nếu có bất kỳ lỗi phát sinh nào, App vẫn chạy tiếp với giá trị mặc định
         st.sidebar.info("🔄 Đang cập nhật tọa độ...")
 else:
@@ -515,6 +515,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
