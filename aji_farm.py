@@ -50,44 +50,49 @@ data = st.session_state.data
 # 4. WEATHER HUẾ - PHIÊN BẢN CHỐNG CRASH
 # ==========================================
 from streamlit_js_eval import get_geolocation
+import requests
+import streamlit as st
 
-# 1. Khởi tạo giá trị dự phòng (Default) để App không bao giờ thiếu biến
+# 1. Giá trị mặc định để app không bao giờ thiếu biến
 temp, humidity, description, city_name = 25, 80, "không rõ", "Vườn Kim Long"
 
-# 2. Lấy tọa độ GPS
+# 2. Lấy GPS
 loc = get_geolocation()
 
-# 3. Kiểm tra đa tầng: loc tồn tại -> có key 'coords' -> có dữ liệu bên trong
-if loc and isinstance(loc, dict) and 'coords' in loc:
-    try:
-        lat = loc['coords'].get('latitude')
-        lon = loc['coords'].get('longitude')
-        
-        if lat and lon:
-# 4. Gọi API thời tiết (Có thêm timeout để tránh treo App)
+# 3. Kiểm tra dữ liệu GPS
+if loc and isinstance(loc, dict) and "coords" in loc:
+
+    lat = loc["coords"].get("latitude")
+    lon = loc["coords"].get("longitude")
+
+    if lat and lon:
+        try:
+            # 4. Gọi API thời tiết
             weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+
             response = requests.get(weather_url, timeout=5)
             weather_data = response.json()
-            
-# Kiểm tra xem API trả về kết quả thành công không (status code 200)
-        if weather_data.get("cod") == 200:
-                city_name = weather_data.get("name", city_name)
-                temp = weather_data['main']['temp']
-                humidity = weather_data['main']['humidity']
-                description = weather_data['weather'][0]['description']
-                st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
-    except Exception as e:
-               st.sidebar.warning("Không thể lấy vị trí GPS, đang dùng vị trí mặc định.")
-               temp, humi, w_code = 25, 80, "Mây rải rác"
-    else:
-                st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
-    except Exception as e:
-# Nếu có bất kỳ lỗi phát sinh nào, App vẫn chạy tiếp với giá trị mặc định
-                st.sidebar.info("🔄 Đang cập nhật tọa độ...")
-    else:
-                st.sidebar.warning("📡 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
 
-# Sau đoạn này, các biến temp, humidity luôn tồn tại, không lo lỗi ở các mục sau.
+            # 5. Kiểm tra API trả về thành công
+            if weather_data.get("cod") == 200:
+                city_name = weather_data.get("name", city_name)
+                temp = weather_data["main"]["temp"]
+                humidity = weather_data["main"]["humidity"]
+                description = weather_data["weather"][0]["description"]
+
+                st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
+
+            else:
+                st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
+
+        except Exception:
+            st.sidebar.warning("⚠️ Không thể lấy dữ liệu thời tiết, dùng dữ liệu mặc định.")
+
+    else:
+        st.sidebar.warning("📡 GPS chưa xác định được tọa độ.")
+
+else:
+    st.sidebar.info("🔄 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -515,6 +520,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
