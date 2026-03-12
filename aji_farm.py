@@ -475,11 +475,12 @@ elif menu == "📷 AI Chẩn đoán bệnh":
     # Hiển thị Top bệnh (Sửa lỗi hiển thị Metric theo ý bạn)
     p_cols = st.columns(len(reliable_preds))
     for i, p in enumerate(reliable_preds):
-        # Đảm bảo không bao giờ lỗi dù AI thiếu key
+    # Đảm bảo không bao giờ lỗi dù AI thiếu key
         disease_name = p.get('disease', 'Không rõ')
         confidence_val = p.get('confidence', 0)
         p_cols[i].metric(disease_name, f"{confidence_val}%")
             
+
 
 
 
