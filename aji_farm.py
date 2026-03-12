@@ -511,7 +511,42 @@ if menu == "📋 Quy trình & Nhắc nhở":
     st.header("🔮 Hệ thống Dự báo & Phân tích Dịch tễ")
 
     # GPS & THỜI TIẾT CACHED
-    loc = get_geolocation()
+    loc = get_geolocation(key='my_unique_gps')
+    def get_weather_data():
+    data = {
+        "temp": 25, "humi": 80, 
+        "desc": "Đang cập nhật...", 
+        "city": "Vườn Kim Long", "icon": "🌡️"
+    }
+
+    try:
+        # THÊM THAM SỐ key Ở ĐÂY
+        loc = get_geolocation(key='aji_farm_gps_location') 
+
+        if loc and isinstance(loc, dict) and "coords" in loc:
+            lat = loc["coords"].get("latitude")
+            lon = loc["coords"].get("longitude")
+
+            if lat and lon:
+                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+                res = requests.get(url, timeout=5).json()
+
+                if res.get("cod") == 200:
+                    data["temp"] = res["main"]["temp"]
+                    data["humi"] = res["main"]["humidity"]
+                    desc = res["weather"][0]["description"].capitalize()
+                    data["city"] = res.get("name", "Vườn Kim Long")
+                    
+                    # Cập nhật icon
+                    if "mưa" in desc.lower(): data["icon"] = "🌧️"
+                    elif "mây" in desc.lower(): data["icon"] = "☁️"
+                    elif "nắng" in desc.lower(): data["icon"] = "☀️"
+                    
+                    data["desc"] = f"{data['icon']} {desc}"
+    except Exception as e:
+        st.sidebar.error(f"Lỗi GPS: {e}")
+        
+    return data
     lat, lon = (loc['coords']['latitude'], loc['coords']['longitude']) if loc else (16.46, 107.59)
     
     try:
@@ -641,6 +676,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
