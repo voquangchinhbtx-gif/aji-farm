@@ -34,8 +34,7 @@ def load_data():
                 return json.load(f)
         except:
             pass
-    return {"plants":[],"yields":[],"expenses":[]}
-
+    return {"plants":[], "yields":[], "expenses":[], "supplies":[]}
 def save_data(data):
     with open(DATA_FILE,"w",encoding="utf-8") as f:
         json.dump(data,f,indent=2,ensure_ascii=False)
@@ -103,6 +102,7 @@ st.sidebar.write("Ngày:",date.today().strftime("%d/%m/%Y"))
 menu=st.sidebar.selectbox("Menu",[
 "📊 Dashboard",
 "🌱 Quản lý cây",
+"📦 Kho vật tư",
 "📷 AI chẩn đoán",
 "🧺 Thu hoạch",
 "💰 Tài chính"
@@ -304,6 +304,42 @@ elif menu=="💰 Tài chính":
         st.bar_chart(chart)
 
         st.table(df)
+# ==========================================
+# 12. KHO VẬT TƯ (PHÂN & THUỐC)
+# ==========================================
+elif menu == "📦 Kho vật tư":
+    st.header("📦 Quản lý Phân bón & Thuốc")
+    
+    with st.form("add_supply"):
+        col1, col2 = st.columns(2)
+        s_name = col1.text_input("Tên phân/thuốc (Vd: Đạm cá, Nano Bạc...)")
+        s_qty = col2.text_input("Số lượng còn lại (Vd: 2 lít, 500g...)")
+        s_note = st.text_input("Ghi chú công dụng (Vd: Bón lá, trị nấm...)")
+        
+        if st.form_submit_button("Lưu vào kho") and s_name:
+            data["supplies"].append({
+                "name": s_name,
+                "qty": s_qty,
+                "note": s_note
+            })
+            save_data(data)
+            st.rerun()
+
+    st.divider()
+    
+    if data.get("supplies"):
+        for i, s in enumerate(data["supplies"]):
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([3, 2, 1])
+                c1.write(f"🧪 **{s['name']}**")
+                c1.caption(f"📝 {s['note']}")
+                c2.write(f"🔢 Còn lại: {s['qty']}")
+                if c3.button("Xóa", key=f"sup_{i}"):
+                    data["supplies"].pop(i)
+                    save_data(data)
+                    st.rerun()
+    else:
+        st.info("Chưa có loại phân thuốc nào trong kho.")
 
 
 
