@@ -50,12 +50,16 @@ data = st.session_state.data
 # ==========================================
 def get_weather():
     try:
-        r = requests.get("https://wttr.in/Kim+Long+Hue?format=%t+%h",timeout=5).text
-        t = int(r.split(" ")[0].replace("+","").replace("°C",""))
-        h = int(r.split(" ")[1].replace("%",""))
-        return t,h
+        # Gọi API lấy thời tiết theo tọa độ chính xác của Kim Long, Huế
+        url = "https://api.open-meteo.com/v1/forecast?latitude=16.45&longitude=107.56&current=temperature_2m,relative_humidity_2m"
+        r = requests.get(url, timeout=5).json()
+        
+        t = int(round(r['current']['temperature_2m']))
+        h = int(r['current']['relative_humidity_2m'])
+        
+        return t, h
     except:
-        return 30,70
+        return 28, 75 # Giá trị dự phòng
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP
@@ -287,4 +291,5 @@ elif menu=="💰 Tài chính":
         st.bar_chart(chart)
 
         st.table(df)
+
 
