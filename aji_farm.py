@@ -201,7 +201,6 @@ def get_weather():
             st.warning(a)
     else:
         st.success("Vườn đang ổn định")
-
 # ==========================================
 # 8. QUẢN LÝ CÂY
 # ==========================================
@@ -513,6 +512,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
