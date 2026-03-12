@@ -205,17 +205,12 @@ def get_weather():
 # ==========================================
 # 8. QUẢN LÝ CÂY
 # ==========================================
-elif menu=="🌱 Quản lý cây":
-
+elif menu=="🌱 Quản lý cây": # Xóa hết khoảng trắng đầu dòng này
     st.header("🌱 Danh sách cây")
-
     with st.form("add_plant"):
-
-        name=st.text_input("Tên cây / chậu")
-
-        d=st.date_input("Ngày trồng",value=date.today())
-
-        if st.form_submit_button("Thêm cây") and name:
+        name = st.text_input("Tên cây / chậu")
+        # Chỗ này dùng date.today() thì đầu file phải có: from datetime import date
+        d = st.date_input("Ngày trồng", value=date.today())
 
             data["plants"].append({
                 "name":name,
@@ -509,6 +504,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
