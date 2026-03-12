@@ -142,7 +142,7 @@ if menu == "📊 Dashboard":
     st.header("📊 Trung tâm điều khiển")
 
     # BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
-    def get_weather():
+def get_weather():
     """
     Hàm lấy dữ liệu thời tiết dự phòng hoặc từ GPS.
     Trả về: nhiệt độ, độ ẩm, và mã trạng thái (hoặc mô tả).
@@ -509,6 +509,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
