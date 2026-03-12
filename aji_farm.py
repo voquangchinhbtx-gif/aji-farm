@@ -53,46 +53,58 @@ from streamlit_js_eval import get_geolocation
 import requests
 import streamlit as st
 
-# 1. Giá trị mặc định để app không bao giờ thiếu biến
-temp, humidity, description, city_name = 25, 80, "không rõ", "Vườn Kim Long"
+# 🔑 API KEY thời tiết
+API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
-# 2. Lấy GPS
-loc = get_geolocation()
+# ==============================
+# HÀM LẤY THỜI TIẾT TỪ GPS
+# ==============================
 
-# 3. Kiểm tra dữ liệu GPS
-if loc and isinstance(loc, dict) and "coords" in loc:
+def get_weather_from_gps():
 
-    lat = loc["coords"].get("latitude")
-    lon = loc["coords"].get("longitude")
+    # giá trị mặc định để app không bao giờ lỗi
+    temp = 25
+    humidity = 80
+    description = "không rõ"
+    city_name = "Vườn Kim Long"
 
-    if lat and lon:
-        try:
-            # 4. Gọi API thời tiết
-            weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+    # lấy vị trí GPS
+    loc = get_geolocation()
 
-            response = requests.get(weather_url, timeout=5)
-            weather_data = response.json()
+    if loc and isinstance(loc, dict) and "coords" in loc:
 
-            # 5. Kiểm tra API trả về thành công
-            if weather_data.get("cod") == 200:
-                city_name = weather_data.get("name", city_name)
-                temp = weather_data["main"]["temp"]
-                humidity = weather_data["main"]["humidity"]
-                description = weather_data["weather"][0]["description"]
+        lat = loc["coords"].get("latitude")
+        lon = loc["coords"].get("longitude")
 
-                st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
+        if lat and lon:
+            try:
+                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
 
-            else:
-                st.sidebar.error("⚠️ Không tìm thấy dữ liệu thời tiết cho tọa độ này.")
+                response = requests.get(url, timeout=5)
+                weather_data = response.json()
 
-        except Exception:
-            st.sidebar.warning("⚠️ Không thể lấy dữ liệu thời tiết, dùng dữ liệu mặc định.")
+                if weather_data.get("cod") == 200:
+
+                    city_name = weather_data.get("name", city_name)
+                    temp = weather_data["main"]["temp"]
+                    humidity = weather_data["main"]["humidity"]
+                    description = weather_data["weather"][0]["description"]
+
+                    st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
+
+                else:
+                    st.sidebar.warning("⚠️ Không tìm thấy dữ liệu thời tiết.")
+
+            except Exception:
+                st.sidebar.warning("⚠️ Không thể lấy dữ liệu thời tiết.")
+
+        else:
+            st.sidebar.info("📡 GPS chưa xác định được tọa độ.")
 
     else:
-        st.sidebar.warning("📡 GPS chưa xác định được tọa độ.")
+        st.sidebar.info("🔄 Đang đợi quyền truy cập vị trí...")
 
-else:
-    st.sidebar.info("🔄 Đang đợi tín hiệu GPS hoặc quyền truy cập vị trí...")
+    return temp, humidity, description, city_name
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -548,6 +560,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
