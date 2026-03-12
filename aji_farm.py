@@ -102,6 +102,7 @@ st.sidebar.write("Ngày:",date.today().strftime("%d/%m/%Y"))
 menu=st.sidebar.selectbox("Menu",[
 "📊 Dashboard",
 "🌱 Quản lý cây",
+"📋 Quy trình & Nhắc nhở",    
 "📦 Kho vật tư",
 "📷 AI chẩn đoán",
 "🧺 Thu hoạch",
@@ -340,6 +341,52 @@ elif menu == "📦 Kho vật tư":
                     st.rerun()
     else:
         st.info("Chưa có loại phân thuốc nào trong kho.")
+# ==========================================
+# 13. QUY TRÌNH & NHẮC NHỞ
+# ==========================================
+elif menu == "📋 Quy trình & Nhắc nhở":
+    st.header("📋 Quy trình chăm sóc & Nhắc việc")
+
+    tab_guide, tab_task = st.tabs(["📖 Quy trình chuẩn", "🔔 Nhắc nhở của tôi"])
+
+    with tab_guide:
+        st.subheader("Quy trình ớt Aji Charapita (Hữu cơ)")
+        with st.expander("Giai đoạn 1: Cây con (1 - 30 ngày)"):
+            st.write("- **Tưới nước:** Giữ ẩm vừa phải, tránh úng.")
+            st.write("- **Dinh dưỡng:** Phun dịch chuối loãng hoặc phân bánh dầu ngâm.")
+            st.write("- **Phòng bệnh:** Xịt nước vôi trong loãng hoặc Nano bạc định kỳ 1 tuần/lần.")
+            
+        with st.expander("Giai đoạn 2: Phát triển & Ra hoa (30 - 60 ngày)"):
+            st.write("- **Cắt tỉa:** Tỉa bớt cành sát gốc để thông thoáng.")
+            st.write("- **Dinh dưỡng:** Bổ sung thêm Canxi-Bo (hữu cơ) để chống rụng bông.")
+            st.write("- **Lưu ý:** Nếu Kim Long có mưa dầm, phải kê chậu cao thoát nước.")
+
+        with st.expander("Giai đoạn 3: Thu hoạch (> 60 ngày)"):
+            st.write("- **Thu hái:** Hái khi quả chuyển sang màu vàng đậm.")
+            st.write("- **Bảo quản:** Để nơi thoáng mát, không rửa nước nếu chưa dùng ngay.")
+
+    with tab_task:
+        st.subheader("🔔 Danh sách việc cần làm")
+        # Form thêm nhắc nhở
+        with st.form("add_task"):
+            t_title = st.text_input("Việc cần làm (Vd: Xịt thuốc nấm sau mưa, Mua thêm đạm cá...)")
+            t_date = st.date_input("Ngày thực hiện", value=date.today())
+            if st.form_submit_button("Thêm nhắc nhở") and t_title:
+                if "tasks" not in data: data["tasks"] = []
+                data["tasks"].append({"title": t_title, "date": str(t_date), "status": "Chưa xong"})
+                save_data(data)
+                st.rerun()
+
+        # Hiển thị danh sách nhắc nhở
+        if "tasks" in data and data["tasks"]:
+            for i, t in enumerate(data["tasks"]):
+                c1, c2, c3 = st.columns([3, 2, 1])
+                c1.write(f"📌 {t['title']}")
+                c2.write(f"📅 {t['date']}")
+                if c3.button("Xong", key=f"task_{i}"):
+                    data["tasks"].pop(i)
+                    save_data(data)
+                    st.rerun()
 
 
 
