@@ -2,165 +2,288 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import requests
 from datetime import datetime, date
 from PIL import Image
 import google.generativeai as genai
 
 # ==========================================
-# 1. CẤU HÌNH HỆ THỐNG
+# 1. CẤU HÌNH
 # ==========================================
-# Thay API Key của bạn vào đây
-API_KEY = "YOUR_GEMINI_API_KEY"
-
-if API_KEY != "YOUR_GEMINI_API_KEY":
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-else:
-    model = None
+st.set_page_config(page_title="Aji Farm Pro v4", page_icon="🌶️", layout="wide")
 
 DATA_FILE = "aji_master_data.json"
 
+# ==========================================
+# 2. AI CONFIG (BẢO MẬT)
+# ==========================================
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+except:
+    model = None
+
+# ==========================================
+# 3. LOAD DATA
+# ==========================================
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
+            with open(DATA_FILE,"r",encoding="utf-8") as f:
                 return json.load(f)
-        except: pass
-    return {"plants": [], "logs": [], "yields": [], "expenses": []}
+        except:
+            pass
+    return {"plants":[],"yields":[],"expenses":[]}
 
 def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with open(DATA_FILE,"w",encoding="utf-8") as f:
+        json.dump(data,f,indent=2,ensure_ascii=False)
 
-# Khởi tạo dữ liệu vào Session State (Tránh mất data khi đổi Tab)
 if "data" not in st.session_state:
     st.session_state.data = load_data()
+
 data = st.session_state.data
 
 # ==========================================
-# 2. LOGIC CẢNH BÁO SÂU BỆNH & DINH DƯỠNG
+# 4. WEATHER HUẾ
 # ==========================================
-def get_alerts(temp, humi, plants):
-    alerts = []
-    # Cảnh báo môi trường dựa trên nhiệt độ & độ ẩm
-    if temp > 30 and humi < 65:
-        alerts.append("🚨 **BỌ TRĨ:** Thời tiết nóng khô, kiểm tra mặt dưới lá non!")
-    if 20 <= temp <= 28 and 70 <= humi <= 85:
-        alerts.append("🚨 **RẦY MỀM:** Điều kiện ấm ẩm lý tưởng cho rầy sinh sản!")
-    if temp > 28 and humi > 85:
-        alerts.append("🚨 **THÁN THƯ:** Nóng ẩm cao, nguy cơ thối trái rụng lá!")
-    if temp > 33:
-        alerts.append("🌡️ **QUÁ NÓNG:** Cần che lưới lan hoặc phun sương hạ nhiệt.")
-    if temp > 32 and humi < 60:
-        alerts.append("💧 **THIẾU NƯỚC:** Bốc hơi nhanh, cần tăng cường tưới gốc.")
+def get_weather():
+    try:
+        r = requests.get("https://wttr.in/Hue?format=%t+%h",timeout=5).text
+        t = int(r.split(" ")[0].replace("+","").replace("°C",""))
+        h = int(r.split(" ")[1].replace("%",""))
+        return t,h
+    except:
+        return 30,70
 
-    # Cảnh báo bón phân theo tuổi từng cây
+# ==========================================
+# 5. CẢNH BÁO NÔNG NGHIỆP
+# ==========================================
+def get_alerts(temp,humi,plants):
+
+    alerts=[]
+
+    if temp>33:
+        alerts.append("🌡️ Nắng nóng mạnh — cần che lưới")
+
+    if temp>30 and humi<60:
+        alerts.append("🚨 Nguy cơ bọ trĩ cao")
+
+    if temp>28 and humi>85:
+        alerts.append("🚨 Nguy cơ nấm bệnh")
+
     for p in plants:
         try:
-            d_plant = datetime.strptime(p["date"], "%Y-%m-%d").date()
-            age = (date.today() - d_plant).days
-            if age in [15, 30, 45, 60, 75]:
-                alerts.append(f"🌿 **{p['name']}**: Ngày thứ {age} - Đến kỳ bón phân định kỳ.")
-        except: pass
+            d=datetime.strptime(p["date"],"%Y-%m-%d").date()
+            age=(date.today()-d).days
+
+            if age>0 and age%15==0:
+                alerts.append(f"🌿 {p['name']} {age} ngày: bón phân hữu cơ")
+
+        except:
+            pass
+
     return alerts
 
 # ==========================================
-# 3. GIAO DIỆN CHÍNH (UI)
+# 6. SIDEBAR
 # ==========================================
-st.set_page_config(page_title="Aji Farm Pro AI", page_icon="🌶️", layout="wide")
+st.sidebar.title("🌶️ Aji Farm Pro")
 
-st.sidebar.title("🌶️ Aji Charapita Pro")
-menu = st.sidebar.selectbox("CHỨC NĂNG", 
-    ["📊 Tổng quan", "🌱 Quản lý cây", "📷 AI Bác sĩ", "📔 Nhật ký", "🧺 Thu hoạch", "💰 Tài chính", "📁 Báo cáo"])
+st.sidebar.write("Ngày:",date.today().strftime("%d/%m/%Y"))
 
-# --- TAB 1: TỔNG QUAN ---
-if menu == "📊 Tổng quan":
-    st.header("📊 Tình trạng vườn thực tế")
-    c1, c2 = st.columns(2)
-    with c1: temp = st.slider("Nhiệt độ hiện tại (°C)", 15, 45, 30)
-    with c2: humi = st.slider("Độ ẩm hiện tại (%)", 20, 100, 70)
+menu=st.sidebar.selectbox("Menu",[
+"📊 Dashboard",
+"🌱 Quản lý cây",
+"📷 AI chẩn đoán",
+"🧺 Thu hoạch",
+"💰 Tài chính"
+])
 
-    st.subheader("🚨 Thông báo & Cảnh báo")
-    alerts = get_alerts(temp, humi, data["plants"])
-    if alerts:
-        for a in alerts: st.warning(a)
-    else: st.success("Mọi chỉ số đang ở mức an toàn.")
+# ==========================================
+# 7. DASHBOARD
+# ==========================================
+if menu=="📊 Dashboard":
+
+    st.header("📊 Trung tâm điều khiển")
+
+    temp,humi=get_weather()
+
+    c1,c2=st.columns(2)
+
+    c1.metric("Nhiệt độ",f"{temp}°C")
+    c2.metric("Độ ẩm",f"{humi}%")
 
     st.divider()
-    st.subheader("🔮 Dự báo sản lượng")
-    if len(data["yields"]) >= 3:
-        df_y = pd.DataFrame(data["yields"])
-        avg = df_y["amount"].mean()
-        # Công thức: Trung bình lứa trước * Số cây * Hệ số tăng trưởng (giả định)
-        predict = avg * len(data["plants"]) * 0.8 
-        st.info(f"Dự báo sản lượng đợt tới: ~{int(predict)} gram")
+
+    total_yield=sum(y["amount"] for y in data["yields"])
+    total_cost=sum(e["amount"] for e in data["expenses"])
+
+    c3,c4,c5=st.columns(3)
+
+    c3.metric("Số cây",len(data["plants"]))
+    c4.metric("Tổng thu hoạch",f"{total_yield} g")
+    c5.metric("Chi phí",f"{total_cost:,} đ")
+
+    st.subheader("Cảnh báo hôm nay")
+
+    alerts=get_alerts(temp,humi,data["plants"])
+
+    if alerts:
+        for a in alerts:
+            st.warning(a)
     else:
-        st.info("Cần thêm dữ liệu thu hoạch (ít nhất 3 lần) để AI dự báo.")
+        st.success("Vườn đang ổn định")
 
-# --- TAB 2: QUẢN LÝ CÂY ---
-elif menu == "🌱 Quản lý cây":
-    st.header("🌱 Quản lý gốc ớt")
-    with st.expander("➕ Thêm cây mới"):
-        with st.form("add_p", clear_on_submit=True):
-            n = st.text_input("Tên/Mã cây")
-            d = st.date_input("Ngày trồng", value=date.today())
-            nt = st.text_input("Ghi chú")
-            if st.form_submit_button("Lưu vào hệ thống") and n:
-                data["plants"].append({"name": n, "date": str(d), "note": nt})
-                save_data(data); st.rerun()
+# ==========================================
+# 8. QUẢN LÝ CÂY
+# ==========================================
+elif menu=="🌱 Quản lý cây":
 
-    for i, p in enumerate(data["plants"]):
-        with st.container(border=True):
-            col1, col2 = st.columns([5, 1])
-            col1.write(f"**{p['name']}** - Trồng ngày: {p['date']}")
-            if col2.button("❌", key=f"del_{i}"):
-                data["plants"].pop(i); save_data(data); st.rerun()
+    st.header("🌱 Danh sách cây")
 
-# --- TAB 3: AI BÁC SĨ ---
-elif menu == "📷 AI Bác sĩ":
-    st.header("📷 Chẩn đoán bằng Thị giác máy tính")
-    img_file = st.camera_input("Chụp ảnh lá hoặc ngọn ớt")
+    with st.form("add_plant"):
+
+        name=st.text_input("Tên cây / chậu")
+
+        d=st.date_input("Ngày trồng",value=date.today())
+
+        if st.form_submit_button("Thêm cây") and name:
+
+            data["plants"].append({
+                "name":name,
+                "date":str(d)
+            })
+
+            save_data(data)
+            st.rerun()
+
+    st.divider()
+
+    for i,p in enumerate(data["plants"]):
+
+        d=datetime.strptime(p["date"],"%Y-%m-%d").date()
+
+        age=(date.today()-d).days
+
+        c1,c2=st.columns([4,1])
+
+        c1.write(f"🌱 {p['name']} — {age} ngày")
+
+        if c2.button("Xóa",key=i):
+            data["plants"].pop(i)
+            save_data(data)
+            st.rerun()
+
+# ==========================================
+# 9. AI CHẨN ĐOÁN
+# ==========================================
+elif menu=="📷 AI chẩn đoán":
+
+    st.header("📷 AI bắt bệnh lá")
+
+    img_file=st.camera_input("Chụp lá")
+
     if img_file:
-        img = Image.open(img_file); st.image(img, width=400)
-        if st.button("🚀 AI Phân tích"):
+
+        img=Image.open(img_file)
+
+        st.image(img,width=400)
+
+        if st.button("Phân tích"):
+
             if model:
-                with st.spinner("Đang soi bệnh..."):
-                    prompt = "Phân tích lá ớt Aji Charapita: tình trạng sức khỏe, sâu bệnh gì, thiếu chất gì và cách xử lý hữu cơ."
-                    res = model.generate_content([prompt, img])
-                    st.success("Kết quả chẩn đoán:"); st.write(res.text)
-            else: st.error("Chưa cấu hình API Key!")
 
-# --- TAB 5: THU HOẠCH ---
-elif menu == "🧺 Thu hoạch":
-    st.header("🧺 Ghi nhận sản lượng")
+                with st.spinner("AI đang phân tích..."):
+
+                    try:
+
+                        prompt="""
+Bạn là chuyên gia nông nghiệp về ớt Aji Charapita.
+
+Hãy phân tích:
+1 bệnh gì
+2 thiếu chất gì
+3 cách xử lý hữu cơ an toàn
+"""
+
+                        res=model.generate_content([prompt,img])
+
+                        st.success("Kết quả")
+
+                        st.write(res.text)
+
+                    except:
+
+                        st.error("AI lỗi")
+
+            else:
+
+                st.error("Chưa cấu hình API")
+
+# ==========================================
+# 10. THU HOẠCH
+# ==========================================
+elif menu=="🧺 Thu hoạch":
+
+    st.header("🧺 Sản lượng")
+
     with st.form("yield"):
-        amt = st.number_input("Khối lượng (gram)", min_value=0)
-        if st.form_submit_button("Lưu thu hoạch"):
-            data["yields"].append({"date": str(date.today()), "amount": amt})
-            save_data(data); st.rerun()
+
+        amt=st.number_input("Gram",min_value=0)
+
+        if st.form_submit_button("Lưu") and amt>0:
+
+            data["yields"].append({
+                "date":str(date.today()),
+                "amount":amt
+            })
+
+            save_data(data)
+
+            st.rerun()
+
     if data["yields"]:
-        df_y = pd.DataFrame(data["yields"])
-        st.line_chart(df_y.set_index("date"))
 
-# --- TAB 6: TÀI CHÍNH ---
-elif menu == "💰 Tài chính":
-    st.header("💰 Quản lý chi phí")
+        df=pd.DataFrame(data["yields"])
+
+        df["date"]=pd.to_datetime(df["date"])
+
+        df=df.sort_values("date")
+
+        st.line_chart(df.set_index("date")["amount"])
+
+# ==========================================
+# 11. TÀI CHÍNH
+# ==========================================
+elif menu=="💰 Tài chính":
+
+    st.header("💰 Chi phí")
+
     with st.form("exp"):
-        item = st.text_input("Khoản chi"); price = st.number_input("Số tiền", min_value=0)
-        if st.form_submit_button("Lưu chi phí"):
-            data["expenses"].append({"item": item, "amount": price})
-            save_data(data); st.rerun()
-    if data["expenses"]:
-        df_e = pd.DataFrame(data["expenses"])
-        st.bar_chart(df_e.set_index("item"))
 
-# --- TAB 7: BÁO CÁO ---
-elif menu == "📁 Báo cáo":
-    st.header("📁 Xuất dữ liệu Excel")
-    if st.button("Tạo file Báo cáo"):
-        with pd.ExcelWriter("Aji_Farm_Report.xlsx") as writer:
-            pd.DataFrame(data["plants"]).to_excel(writer, sheet_name="Cay")
-            pd.DataFrame(data["yields"]).to_excel(writer, sheet_name="ThuHoach")
-            pd.DataFrame(data["expenses"]).to_excel(writer, sheet_name="TaiChinh")
-        with open("Aji_Farm_Report.xlsx", "rb") as f:
-            st.download_button("📥 Tải xuống Excel", f, file_name="Aji_Farm_Report.xlsx")
+        item=st.text_input("Vật tư")
+
+        price=st.number_input("Số tiền",min_value=0)
+
+        if st.form_submit_button("Lưu") and item and price>0:
+
+            data["expenses"].append({
+                "item":item,
+                "amount":price
+            })
+
+            save_data(data)
+
+            st.rerun()
+
+    if data["expenses"]:
+
+        df=pd.DataFrame(data["expenses"])
+
+        chart=df.groupby("item")["amount"].sum()
+
+        st.bar_chart(chart)
+
+        st.table(df)
