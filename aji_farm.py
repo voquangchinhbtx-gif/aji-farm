@@ -50,43 +50,46 @@ data = st.session_state.data
 # ==========================================
 def get_weather():
     try:
-        # Gọi API lấy thời tiết theo tọa độ chính xác của Kim Long, Huế
-        url = "https://api.open-meteo.com/v1/forecast?latitude=16.45&longitude=107.56&current=temperature_2m,relative_humidity_2m"
+        # Lấy thêm mã thời tiết (weather_code)
+        url = "https://api.open-meteo.com/v1/forecast?latitude=16.45&longitude=107.56&current=temperature_2m,relative_humidity_2m,weather_code"
         r = requests.get(url, timeout=5).json()
         
         t = int(round(r['current']['temperature_2m']))
         h = int(r['current']['relative_humidity_2m'])
+        w_code = r['current']['weather_code'] # Mã trạng thái thời tiết
         
-        return t, h
+        return t, h, w_code
     except:
-        return 28, 75 # Giá trị dự phòng
+        return 28, 75, 0
 
 # ==========================================
-# 5. CẢNH BÁO NÔNG NGHIỆP
+# 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
 # ==========================================
-def get_alerts(temp,humi,plants):
+def get_alerts(temp, humi, w_code, plants):
+    alerts = []
 
-    alerts=[]
+    # Kiểm tra mã mưa (Các mã từ 51 đến 99 là có mưa)
+    if w_code >= 51:
+        alerts.append("🌧️ **TRỜI ĐANG MƯA:** Kiểm tra thoát nước gốc, tránh để ớt úng rễ!")
+        alerts.append("🚨 **NẤM BỆNH:** Sau mưa cần kiểm tra nấm trắng trên lá!")
 
-    if temp>33:
+    if temp > 33:
         alerts.append("🌡️ Nắng nóng mạnh — cần che lưới")
-
-    if temp>30 and humi<60:
+    
+    if temp > 30 and humi < 60:
         alerts.append("🚨 Nguy cơ bọ trĩ cao")
 
-    if temp>28 and humi>85:
-        alerts.append("🚨 Nguy cơ nấm bệnh")
+    if temp > 28 and humi > 85 and w_code < 51: # Độ ẩm cao mà không mưa
+        alerts.append("🚨 Nguy cơ nấm bệnh do độ ẩm cao")
 
+    # (Giữ nguyên phần nhắc bón phân cũ bên dưới...)
     for p in plants:
         try:
-            d=datetime.strptime(p["date"],"%Y-%m-%d").date()
-            age=(date.today()-d).days
-
-            if age>0 and age%15==0:
+            d = datetime.strptime(p["date"], "%Y-%m-%d").date()
+            age = (date.today() - d).days
+            if age > 0 and age % 15 == 0:
                 alerts.append(f"🌿 {p['name']} {age} ngày: bón phân hữu cơ")
-
-        except:
-            pass
+        except: pass
 
     return alerts
 
@@ -291,5 +294,6 @@ elif menu=="💰 Tài chính":
         st.bar_chart(chart)
 
         st.table(df)
+
 
 
