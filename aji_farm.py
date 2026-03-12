@@ -60,8 +60,8 @@ loc = get_geolocation()
 # 3. Kiểm tra đa tầng: loc tồn tại -> có key 'coords' -> có dữ liệu bên trong
 if loc and isinstance(loc, dict) and 'coords' in loc:
     try:
-        lat = loc['coords'].get('latitude')
-        lon = loc['coords'].get('longitude')
+    lat = loc['coords'].get('latitude')
+    lon = loc['coords'].get('longitude')
         
 if lat and lon:
 # 4. Gọi API thời tiết (Có thêm timeout để tránh treo App)
@@ -512,6 +512,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
