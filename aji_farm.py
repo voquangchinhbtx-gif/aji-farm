@@ -26,7 +26,7 @@ if API_KEY:
     return {"plants": [], "logs": [], "yields": [], "expenses": []}
 
 def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 # Khởi tạo dữ liệu vào Session State (Tránh mất data khi đổi Tab)
@@ -162,3 +162,4 @@ elif menu == "📁 Báo cáo":
         with open("Aji_Farm_Report.xlsx", "rb") as f:
 
             st.download_button("📥 Tải xuống Excel", f, file_name="Aji_Farm_Report.xlsx")
+
