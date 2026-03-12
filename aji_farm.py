@@ -60,17 +60,17 @@ loc = get_geolocation()
 # 3. Kiểm tra đa tầng: loc tồn tại -> có key 'coords' -> có dữ liệu bên trong
 if loc and isinstance(loc, dict) and 'coords' in loc:
     try:
-    lat = loc['coords'].get('latitude')
-    lon = loc['coords'].get('longitude')
+        lat = loc['coords'].get('latitude')
+        lon = loc['coords'].get('longitude')
         
-if lat and lon:
+        if lat and lon:
 # 4. Gọi API thời tiết (Có thêm timeout để tránh treo App)
             weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
             response = requests.get(weather_url, timeout=5)
             weather_data = response.json()
             
 # Kiểm tra xem API trả về kết quả thành công không (status code 200)
-if weather_data.get("cod") == 200:
+        if weather_data.get("cod") == 200:
                 city_name = weather_data.get("name", city_name)
                 temp = weather_data['main']['temp']
                 humidity = weather_data['main']['humidity']
@@ -512,6 +512,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
