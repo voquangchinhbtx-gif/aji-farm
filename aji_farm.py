@@ -97,31 +97,36 @@ else:
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
 # ==========================================
+from datetime import datetime, date
+
 def get_alerts(temp, humi, w_code, plants):
     alerts = []
 
-# Kiểm tra mã mưa (Các mã từ 51 đến 99 là có mưa)
-if w_code >= 51:
+    # Kiểm tra mã mưa (51–99 là mưa)
+    if w_code >= 51:
         alerts.append("🌧️ **TRỜI ĐANG MƯA:** Kiểm tra thoát nước gốc, tránh để ớt úng rễ!")
         alerts.append("🚨 **NẤM BỆNH:** Sau mưa cần kiểm tra nấm trắng trên lá!")
 
-if temp > 33:
+    if temp > 33:
         alerts.append("🌡️ Nắng nóng mạnh — cần che lưới")
-    
-if temp > 30 and humi < 60:
+
+    if temp > 30 and humi < 60:
         alerts.append("🚨 Nguy cơ bọ trĩ cao")
 
-if temp > 28 and humi > 85 and w_code < 51: # Độ ẩm cao mà không mưa
+    if temp > 28 and humi > 85 and w_code < 51:  # Ẩm cao nhưng không mưa
         alerts.append("🚨 Nguy cơ nấm bệnh do độ ẩm cao")
 
-# (Giữ nguyên phần nhắc bón phân cũ bên dưới...)
+    # Nhắc lịch bón phân theo tuổi cây
     for p in plants:
         try:
             d = datetime.strptime(p["date"], "%Y-%m-%d").date()
             age = (date.today() - d).days
-if age > 0 and age % 15 == 0:
+
+            if age > 0 and age % 15 == 0:
                 alerts.append(f"🌿 {p['name']} {age} ngày: bón phân hữu cơ")
-        except: pass
+
+        except:
+            pass
 
     return alerts
 
@@ -520,6 +525,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
