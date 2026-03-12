@@ -1,5 +1,6 @@
 streamlit
-pandas
-google-generativeai
-Pillow
 requests
+pandas
+Pillow
+google-generativeai
+streamlit-js-eval
