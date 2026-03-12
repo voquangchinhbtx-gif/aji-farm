@@ -154,52 +154,42 @@ if menu == "📊 Dashboard":
 
     st.header("📊 Trung tâm điều khiển")
 
-# BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
-def get_weather():
-    """
-    Hàm lấy dữ liệu thời tiết dự phòng hoặc từ GPS.
-    Trả về: nhiệt độ, độ ẩm, và mã trạng thái (hoặc mô tả).
-    """
-# Bạn có thể dùng tọa độ mặc định của Kim Long, Huế
-    lat, lon = 16.46, 107.59 
-    api_key = "YOUR_OPENWEATHERMAP_API_KEY" # Đảm bảo đã thay key thật
-    
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
-        res = requests.get(url, timeout=5).json()
-        
-    def get_weather(lat, lon, api_key):
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
-        res = requests.get(url, timeout=5).json()
+    # Hàm lấy thời tiết
+    def get_weather():
+        lat, lon = 16.46, 107.59
+        api_key = "YOUR_OPENWEATHERMAP_API_KEY"
 
-        if res.get("cod") == 200:
-            t = res["main"]["temp"]
-            h = res["main"]["humidity"]
-            w = res["weather"][0]["description"]
-            return t, h, w
+        try:
+            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
+            res = requests.get(url, timeout=5).json()
 
-    except Exception:
-        pass
+            if res.get("cod") == 200:
+                temp = res["main"]["temp"]
+                humi = res["main"]["humidity"]
+                w_code = res["weather"][0]["id"]
 
-    # fallback nếu lỗi
-    return 25, 80, "không rõ"
-    
-# Trả về giá trị mặc định nếu API lỗi để App không sập
-    return 25, 80, "không rõ"
+                return temp, humi, w_code
+
+        except:
+            pass
+
+        # fallback
+        return 25, 80, 0
+
+
+    # Lấy dữ liệu thời tiết
     temp, humi, w_code = get_weather()
 
     c1, c2 = st.columns(2)
-
     c1.metric("Nhiệt độ", f"{temp}°C")
     c2.metric("Độ ẩm", f"{humi}%")
 
-# Hiển thị biểu tượng thời tiết dựa trên mã w_code
-if w_code >= 51:
+    # Hiển thị trạng thái thời tiết
+    if w_code >= 51:
         st.info("🌧️ Hiện tại Kim Long đang có mưa")
-elif w_code == 0:
+    elif w_code == 0:
         st.info("☀️ Trời đang nắng đẹp")
-else:
+    else:
         st.info("☁️ Trời nhiều mây")
 
     st.divider()
@@ -215,13 +205,12 @@ else:
 
     st.subheader("Cảnh báo hôm nay")
 
-# Gửi thêm w_code vào hàm cảnh báo
     alerts = get_alerts(temp, humi, w_code, data["plants"])
 
-if alerts:
+    if alerts:
         for a in alerts:
             st.warning(a)
-else:
+    else:
         st.success("Vườn đang ổn định")
 # ==========================================
 # 8. QUẢN LÝ CÂY
@@ -534,6 +523,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
