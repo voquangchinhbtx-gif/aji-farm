@@ -52,21 +52,23 @@ data = st.session_state.data
 import streamlit as st
 import requests
 from streamlit_js_eval import get_geolocation
+from datetime import datetime
 
-# 🔑 API OpenWeather
+# --- CẤU HÌNH ---
+st.set_page_config(page_title="Aji Charapita Farm", layout="wide")
 API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
-# ==============================
-# HÀM LẤY THỜI TIẾT TỪ GPS
-# ==============================
 
-def get_weather_from_gps():
+# --- HÀM LẤY THỜI TIẾT ---
+def get_weather_data():
 
-    # Giá trị dự phòng (để app không bao giờ lỗi)
-    temp = 25
-    humidity = 80
-    description = "Đang cập nhật..."
-    city_name = "Vườn Kim Long"
+    data = {
+        "temp": 25,
+        "humi": 80,
+        "desc": "Đang cập nhật...",
+        "city": "Vườn Kim Long",
+        "icon": "🌡️"
+    }
 
     try:
         loc = get_geolocation()
@@ -78,72 +80,112 @@ def get_weather_from_gps():
 
             if lat and lon:
 
-                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+                url = (
+                    f"https://api.openweathermap.org/data/2.5/weather?"
+                    f"lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+                )
 
                 res = requests.get(url, timeout=5).json()
 
                 if res.get("cod") == 200:
-                    city_name = res.get("name", city_name)
-                    temp = res["main"]["temp"]
-                    humidity = res["main"]["humidity"]
-                    description = res["weather"][0]["description"].capitalize()
 
-                    st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
+                    data["temp"] = res["main"]["temp"]
+                    data["humi"] = res["main"]["humidity"]
+
+                    raw_desc = res["weather"][0]["description"].capitalize()
+                    data["city"] = res.get("name", "Vườn Kim Long")
+
+                    desc_l = raw_desc.lower()
+
+                    if "mưa" in desc_l:
+                        icon = "🌧️"
+                    elif "mây" in desc_l:
+                        icon = "☁️"
+                    elif "quang" in desc_l or "nắng" in desc_l:
+                        icon = "☀️"
+                    elif "dông" in desc_l:
+                        icon = "⚡"
+                    else:
+                        icon = "🌡️"
+
+                    data["icon"] = icon
+                    data["desc"] = f"{icon} {raw_desc}"
+
+                    st.sidebar.success(f"📍 Vị trí: {data['city']}")
 
                 else:
-                    st.sidebar.warning("⚠️ Không tìm thấy dữ liệu thời tiết.")
-
-            else:
-                st.sidebar.info("📡 Đang xác định tọa độ...")
+                    st.sidebar.warning("⚠️ Không lấy được dữ liệu thời tiết.")
 
         else:
-            st.sidebar.info("🔄 Vui lòng cho phép truy cập vị trí...")
+            st.sidebar.info("🔄 Đang chờ quyền truy cập GPS...")
 
     except Exception:
-        st.sidebar.error("⚠️ Lỗi kết nối thời tiết.")
+        st.sidebar.error("⚠️ Lỗi kết nối thời tiết")
 
-    # ==============================
-    # CHỌN ICON THEO THỜI TIẾT
-    # ==============================
-
-    desc_lower = description.lower()
-
-    if "mưa" in desc_lower:
-        icon = "🌧️"
-    elif "mây" in desc_lower:
-        icon = "☁️"
-    elif "quang" in desc_lower or "nắng" in desc_lower:
-        icon = "☀️"
-    elif "dông" in desc_lower or "sét" in desc_lower:
-        icon = "⚡"
-    else:
-        icon = "🌡️"
-
-    return temp, humidity, f"{icon} {description}", city_name
+    return data
 
 
-# ==============================
-# DASHBOARD
-# ==============================
-
+# --- GIAO DIỆN CHÍNH ---
 st.title("🌶️ Aji Charapita Farm Management")
+
+weather = get_weather_data()
+
 st.subheader("📊 Trung tâm điều khiển")
 
-t, h, desc, city = get_weather_from_gps()
+c1, c2, c3 = st.columns(3)
 
-col1, col2, col3 = st.columns(3)
+# --- Nhiệt độ ---
+with c1:
 
-with col1:
-    st.metric("🌡️ Nhiệt độ", f"{t}°C")
+    if weather["temp"] > 32:
+        t_delta = "Nóng!"
+        delta_color = "inverse"
+    else:
+        t_delta = "Ổn định"
+        delta_color = "normal"
 
-with col2:
-    st.metric("💧 Độ ẩm", f"{h}%")
+    st.metric("Nhiệt độ", f"{weather['temp']}°C", delta=t_delta, delta_color=delta_color)
 
-with col3:
+
+# --- Độ ẩm ---
+with c2:
+
+    if weather["humi"] > 85:
+        h_delta = "Ẩm cao"
+    else:
+        h_delta = "Bình thường"
+
+    st.metric("Độ ẩm", f"{weather['humi']}%", delta=h_delta)
+
+
+# --- Thời tiết ---
+with c3:
+
     st.write("**Thời tiết thực tế**")
-    st.info(desc)
+    st.info(weather["desc"])
+
 
 st.divider()
+
+
+# --- PHẦN AI CẢNH BÁO ---
+predictions = []   # nơi load dữ liệu AI sau này
+
+reliable_preds = [
+    p for p in predictions if p.get("confidence", 0) > 60
+] if predictions else []
+
+
+if reliable_preds:
+
+    st.success("📢 Có cảnh báo quan trọng từ AI!")
+
+    for p in reliable_preds:
+        st.write(f"🌿 {p.get('plant','Không rõ')} — {p.get('disease','Không rõ')}")
+
+else:
+
+    st.write("✅ Chưa có cảnh báo bệnh hại nào được ghi nhận.")
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -599,6 +641,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
