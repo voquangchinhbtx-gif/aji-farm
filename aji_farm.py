@@ -46,19 +46,29 @@ data = st.session_state.data
 # ==========================================
 # 4. WEATHER HUẾ
 # ==========================================
-def get_weather():
-    try:
-        # Lấy thêm mã thời tiết (weather_code)
-        url = "https://api.open-meteo.com/v1/forecast?latitude=16.45&longitude=107.56&current=temperature_2m,relative_humidity_2m,weather_code"
-        r = requests.get(url, timeout=5).json()
-        
-        t = int(round(r['current']['temperature_2m']))
-        h = int(r['current']['relative_humidity_2m'])
-        w_code = r['current']['weather_code'] # Mã trạng thái thời tiết
-        
-        return t, h, w_code
-    except:
-        return 28, 75, 0
+from streamlit_js_eval import get_geolocation
+
+# 1. Lấy tọa độ GPS từ thiết bị người dùng
+loc = get_geolocation()
+
+if loc:
+    lat = loc['coords']['latitude']
+    lon = loc['coords']['longitude']
+    
+    # 2. Gọi API thời tiết dựa trên tọa độ (Thay API_KEY của bạn vào)
+    weather_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+    weather_data = requests.get(weather_url).json()
+    
+    city_name = weather_data.get("name", "Vị trí của bạn")
+    temp = weather_data['main']['temp']
+    humidity = weather_data['main']['humidity']
+    description = weather_data['weather'][0]['description']
+    
+    st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
+else:
+    st.sidebar.warning("⚠️ Vui lòng cho phép truy cập vị trí để nhận cảnh báo thời tiết chính xác.")
+    # Dự phòng nếu không lấy được vị trí
+    temp, humidity, description = 25, 80, "không rõ"
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -428,6 +438,7 @@ elif menu == "📋 Quy trình & Nhắc nhở":
                     save_data(data)
                     st.success(f"Đã lưu: {p_choice} bón {s_choice}")
                     st.rerun()
+
 
 
 
