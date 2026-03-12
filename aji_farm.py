@@ -111,31 +111,41 @@ menu=st.sidebar.selectbox("Menu",[
 # ==========================================
 # 7. DASHBOARD
 # ==========================================
-if menu=="📊 Dashboard":
+if menu == "📊 Dashboard":
 
     st.header("📊 Trung tâm điều khiển")
 
-    temp,humi=get_weather()
+    # BƯỚC QUAN TRỌNG: Nhận đủ 3 giá trị (thêm w_code)
+    temp, humi, w_code = get_weather()
 
-    c1,c2=st.columns(2)
+    c1, c2 = st.columns(2)
 
-    c1.metric("Nhiệt độ",f"{temp}°C")
-    c2.metric("Độ ẩm",f"{humi}%")
+    c1.metric("Nhiệt độ", f"{temp}°C")
+    c2.metric("Độ ẩm", f"{humi}%")
+
+    # Hiển thị biểu tượng thời tiết dựa trên mã w_code
+    if w_code >= 51:
+        st.info("🌧️ Hiện tại Kim Long đang có mưa")
+    elif w_code == 0:
+        st.info("☀️ Trời đang nắng đẹp")
+    else:
+        st.info("☁️ Trời nhiều mây")
 
     st.divider()
 
-    total_yield=sum(y["amount"] for y in data["yields"])
-    total_cost=sum(e["amount"] for e in data["expenses"])
+    total_yield = sum(y["amount"] for y in data["yields"])
+    total_cost = sum(e["amount"] for e in data["expenses"])
 
-    c3,c4,c5=st.columns(3)
+    c3, c4, c5 = st.columns(3)
 
-    c3.metric("Số cây",len(data["plants"]))
-    c4.metric("Tổng thu hoạch",f"{total_yield} g")
-    c5.metric("Chi phí",f"{total_cost:,} đ")
+    c3.metric("Số cây", len(data["plants"]))
+    c4.metric("Tổng thu hoạch", f"{total_yield} g")
+    c5.metric("Chi phí", f"{total_cost:,} đ")
 
     st.subheader("Cảnh báo hôm nay")
 
-    alerts=get_alerts(temp,humi,data["plants"])
+    # Gửi thêm w_code vào hàm cảnh báo
+    alerts = get_alerts(temp, humi, w_code, data["plants"])
 
     if alerts:
         for a in alerts:
@@ -294,6 +304,7 @@ elif menu=="💰 Tài chính":
         st.bar_chart(chart)
 
         st.table(df)
+
 
 
 
