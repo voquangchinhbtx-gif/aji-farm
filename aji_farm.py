@@ -168,7 +168,7 @@ def get_weather():
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
         res = requests.get(url, timeout=5).json()
         
-if res.get("cod") == 200:
+    if res.get("cod") == 200:
             t = res['main']['temp']
             h = res['main']['humidity']
             w = res['weather'][0]['description']
@@ -525,6 +525,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
