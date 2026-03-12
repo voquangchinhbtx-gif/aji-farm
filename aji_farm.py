@@ -50,7 +50,7 @@ data = st.session_state.data
 # ==========================================
 def get_weather():
     try:
-        r = requests.get("https://wttr.in/Hue?format=%t+%h",timeout=5).text
+        r = requests.get("https://wttr.in/Kim+Long+Hue?format=%t+%h",timeout=5).text
         t = int(r.split(" ")[0].replace("+","").replace("°C",""))
         h = int(r.split(" ")[1].replace("%",""))
         return t,h
@@ -287,3 +287,4 @@ elif menu=="💰 Tài chính":
         st.bar_chart(chart)
 
         st.table(df)
+
