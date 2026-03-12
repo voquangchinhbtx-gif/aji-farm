@@ -241,36 +241,45 @@ Hãy phân tích:
                 st.error("Chưa cấu hình API")
 
 # ==========================================
-# 10. THU HOẠCH
+# 10. AI CHẨN ĐOÁN BỆNH (BẢN CẬP NHẬT CUỐI)
 # ==========================================
-elif menu=="🧺 Thu hoạch":
-
-    st.header("🧺 Sản lượng")
-
-    with st.form("yield"):
-
-        amt=st.number_input("Gram",min_value=0)
-
-        if st.form_submit_button("Lưu") and amt>0:
-
-            data["yields"].append({
-                "date":str(date.today()),
-                "amount":amt
-            })
-
-            save_data(data)
-
-            st.rerun()
-
-    if data["yields"]:
-
-        df=pd.DataFrame(data["yields"])
-
-        df["date"]=pd.to_datetime(df["date"])
-
-        df=df.sort_values("date")
-
-        st.line_chart(df.set_index("date")["amount"])
+elif menu == "📷 AI chẩn đoán":
+    st.header("📸 Chẩn đoán bệnh bằng AI")
+    
+    img_file = st.camera_input("Chụp ảnh lá hoặc thân cây ớt")
+    
+    if img_file is not None:
+        # 1. Hiển thị ảnh ngay để người dùng yên tâm
+        img = Image.open(img_file)
+        st.image(img, caption="Ảnh đang phân tích", use_container_width=True)
+        
+        if st.button("🚀 Bắt đầu phân tích"):
+            with st.spinner("Đang gửi ảnh sang hệ thống AI..."):
+                try:
+                    # 2. Cấu hình Model
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    # 3. Phân tích trực tiếp bằng đối tượng Image của PIL
+                    prompt = """
+                    Bạn là chuyên gia nông nghiệp cho giống ớt Aji Charapita. 
+                    Nhìn vào ảnh này, hãy chẩn đoán tình trạng sức khỏe của cây:
+                    1. Tên bệnh hoặc loại sâu/nấm (nếu có).
+                    2. Cách xử lý hữu cơ (dùng Nano bạc, Neem oil, hoặc cách tự nhiên).
+                    Nếu ảnh không rõ, hãy yêu cầu người dùng chụp lại gần lá hơn.
+                    """
+                    
+                    # Gửi ảnh đi (Gemini 1.5 Flash hỗ trợ gửi thẳng đối tượng PIL Image)
+                    response = model.generate_content([prompt, img])
+                    
+                    st.success("🤖 AI Phản hồi:")
+                    st.markdown(response.text)
+                    
+                except Exception as e:
+                    # Hiển thị lỗi chi tiết để mình biết đường sửa
+                    st.error("❌ Lỗi phân tích!")
+                    with st.expander("Chi tiết lỗi cho kỹ thuật"):
+                        st.code(str(e))
+                    st.info("Hãy thử kiểm tra lại API Key trong mục Secrets của Streamlit nhé.")
 
 # ==========================================
 # 11. TÀI CHÍNH
@@ -405,6 +414,7 @@ elif menu == "📋 Quy trình & Nhắc nhở":
                         data["tasks"].pop(i)
                         save_data(data)
                         st.rerun()
+
 
 
 
