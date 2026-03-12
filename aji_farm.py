@@ -369,9 +369,9 @@ elif menu == "📋 Quy trình & Nhắc nhở":
         # Hiển thị bảng quy trình kèm trạng thái tồn kho
         final_display = []
         for g in standard_guides:
-            # Kiểm tra xem tên phân trong quy trình có nằm trong tên vật tư ở kho không
-            status = "✅ Sẵn có" if bất_kỳ_vật_tư_nào_khớp = any(g["Phân cần dùng"].lower() in s for s in supplies_in_stock) else "❌ Hết hàng"
-            
+            # Kiểm tra xem loại phân trong quy trình có khớp với vật tư nào trong kho không
+            is_in_stock = any(g["Phân cần dùng"].lower() in s for s in supplies_in_stock)
+            status = "✅ Sẵn có" if is_in_stock else "❌ Hết hàng"
             final_display.append({
                 "Giai đoạn": g["Giai đoạn"],
                 "Loại phân": g["Phân cần dùng"],
@@ -406,6 +406,7 @@ elif menu == "📋 Quy trình & Nhắc nhở":
         st.divider()
         # Phần nhắc nhở thủ công giữ nguyên như cũ...
         st.write("(Sử dụng form bên dưới để ghi chú thêm các việc khác)")
+
 
 
 
