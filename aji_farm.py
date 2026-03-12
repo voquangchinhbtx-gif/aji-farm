@@ -10,19 +10,16 @@ import google.generativeai as genai
 # 1. CẤU HÌNH HỆ THỐNG
 # ==========================================
 # Thay API Key của bạn vào đây
-API_KEY = "YOUR_GEMINI_API_KEY"
+# --- CẤU HÌNH GEMINI AI ---
+# Mình đã dán mã của bạn vào đây rồi nhé
+API_KEY = "AIzaSyCBqUjnG3kJLuwYuZzWX9piIf-eqE29GQs" 
 
-if API_KEY != "YOUR_GEMINI_API_KEY":
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-else:
-    model = None
-
-DATA_FILE = "aji_master_data.json"
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
+if API_KEY:
+    try:
+        genai.configure(api_key=API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.error(f"Lỗi cấu hình AI: {e}")
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except: pass
@@ -163,4 +160,5 @@ elif menu == "📁 Báo cáo":
             pd.DataFrame(data["yields"]).to_excel(writer, sheet_name="ThuHoach")
             pd.DataFrame(data["expenses"]).to_excel(writer, sheet_name="TaiChinh")
         with open("Aji_Farm_Report.xlsx", "rb") as f:
+
             st.download_button("📥 Tải xuống Excel", f, file_name="Aji_Farm_Report.xlsx")
