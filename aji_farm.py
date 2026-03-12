@@ -205,7 +205,7 @@ def get_weather():
 # ==========================================
 # 8. QUẢN LÝ CÂY
 # ==========================================
-elif menu=="🌱 Quản lý cây": # Xóa hết khoảng trắng đầu dòng này
+elif menu=="🌱 Quản lý cây": 
     st.header("🌱 Danh sách cây")
     with st.form("add_plant"):
         name = st.text_input("Tên cây / chậu")
@@ -504,6 +504,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
