@@ -205,37 +205,46 @@ def get_weather():
 # ==========================================
 # 8. QUẢN LÝ CÂY
 # ==========================================
-elif menu=="🌱 Quản lý cây": 
+elif menu == "🌱 Quản lý cây":
     st.header("🌱 Danh sách cây")
+
+    # --- 1. Form thêm cây mới ---
     with st.form("add_plant"):
         name = st.text_input("Tên cây / chậu")
-        # Chỗ này dùng date.today() thì đầu file phải có: from datetime import date
+        # Đảm bảo đầu file có: from datetime import date
         d = st.date_input("Ngày trồng", value=date.today())
-
+        
+        # PHẢI có nút Submit button bên trong Form
+        submitted = st.form_submit_button("Thêm cây mới")
+        
+        if submitted and name:
             data["plants"].append({
-                "name":name,
-                "date":str(d)
+                "name": name,
+                "date": str(d)
             })
-
             save_data(data)
+            st.success(f"Đã thêm cây {name}!")
             st.rerun()
 
     st.divider()
 
-    for i,p in enumerate(data["plants"]):
-
-        d=datetime.strptime(p["date"],"%Y-%m-%d").date()
-
-        age=(date.today()-d).days
-
-        c1,c2=st.columns([4,1])
-
-        c1.write(f"🌱 {p['name']} — {age} ngày")
-
-        if c2.button("Xóa",key=i):
-            data["plants"].pop(i)
-            save_data(data)
-            st.rerun()
+    # --- 2. Hiển thị danh sách cây hiện có ---
+    # Kiểm tra nếu có dữ liệu plants
+    if data.get("plants"):
+        for i, p in enumerate(data["plants"]):
+            # Ép kiểu datetime để tính số ngày tuổi
+            d_obj = datetime.strptime(p["date"], "%Y-%m-%d").date()
+            age = (date.today() - d_obj).days
+            
+            c1, c2 = st.columns([4, 1])
+            c1.write(f"**{p['name']}** — {age} ngày tuổi")
+            
+            if c2.button("Xóa", key=f"del_{i}"):
+                data["plants"].pop(i)
+                save_data(data)
+                st.rerun()
+    else:
+        st.info("Chưa có cây nào trong danh sách. Hãy thêm cây ở phía trên!")
 
 # ==========================================
 # 9. AI CHẨN ĐOÁN
@@ -504,6 +513,7 @@ if reliable_preds:
     }
     data["disease_map"].append(new_case)
     save_data(data)
+
 
 
 
