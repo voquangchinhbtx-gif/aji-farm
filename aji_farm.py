@@ -49,11 +49,11 @@ data = st.session_state.data
 # ==========================================
 # 4. WEATHER HUẾ - PHIÊN BẢN CHỐNG CRASH
 # ==========================================
-from streamlit_js_eval import get_geolocation
-import requests
 import streamlit as st
+import requests
+from streamlit_js_eval import get_geolocation
 
-# 🔑 API KEY thời tiết
+# 🔑 API OpenWeather
 API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
 # ==============================
@@ -62,49 +62,88 @@ API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
 def get_weather_from_gps():
 
-    # giá trị mặc định để app không bao giờ lỗi
+    # Giá trị dự phòng (để app không bao giờ lỗi)
     temp = 25
     humidity = 80
-    description = "không rõ"
+    description = "Đang cập nhật..."
     city_name = "Vườn Kim Long"
 
-    # lấy vị trí GPS
-    loc = get_geolocation()
+    try:
+        loc = get_geolocation()
 
-    if loc and isinstance(loc, dict) and "coords" in loc:
+        if loc and "coords" in loc:
 
-        lat = loc["coords"].get("latitude")
-        lon = loc["coords"].get("longitude")
+            lat = loc["coords"].get("latitude")
+            lon = loc["coords"].get("longitude")
 
-        if lat and lon:
-            try:
+            if lat and lon:
+
                 url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
 
-                response = requests.get(url, timeout=5)
-                weather_data = response.json()
+                res = requests.get(url, timeout=5).json()
 
-                if weather_data.get("cod") == 200:
-
-                    city_name = weather_data.get("name", city_name)
-                    temp = weather_data["main"]["temp"]
-                    humidity = weather_data["main"]["humidity"]
-                    description = weather_data["weather"][0]["description"]
+                if res.get("cod") == 200:
+                    city_name = res.get("name", city_name)
+                    temp = res["main"]["temp"]
+                    humidity = res["main"]["humidity"]
+                    description = res["weather"][0]["description"].capitalize()
 
                     st.sidebar.success(f"📍 Đang theo dõi tại: {city_name}")
 
                 else:
                     st.sidebar.warning("⚠️ Không tìm thấy dữ liệu thời tiết.")
 
-            except Exception:
-                st.sidebar.warning("⚠️ Không thể lấy dữ liệu thời tiết.")
+            else:
+                st.sidebar.info("📡 Đang xác định tọa độ...")
 
         else:
-            st.sidebar.info("📡 GPS chưa xác định được tọa độ.")
+            st.sidebar.info("🔄 Vui lòng cho phép truy cập vị trí...")
 
+    except Exception:
+        st.sidebar.error("⚠️ Lỗi kết nối thời tiết.")
+
+    # ==============================
+    # CHỌN ICON THEO THỜI TIẾT
+    # ==============================
+
+    desc_lower = description.lower()
+
+    if "mưa" in desc_lower:
+        icon = "🌧️"
+    elif "mây" in desc_lower:
+        icon = "☁️"
+    elif "quang" in desc_lower or "nắng" in desc_lower:
+        icon = "☀️"
+    elif "dông" in desc_lower or "sét" in desc_lower:
+        icon = "⚡"
     else:
-        st.sidebar.info("🔄 Đang đợi quyền truy cập vị trí...")
+        icon = "🌡️"
 
-    return temp, humidity, description, city_name
+    return temp, humidity, f"{icon} {description}", city_name
+
+
+# ==============================
+# DASHBOARD
+# ==============================
+
+st.title("🌶️ Aji Charapita Farm Management")
+st.subheader("📊 Trung tâm điều khiển")
+
+t, h, desc, city = get_weather_from_gps()
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("🌡️ Nhiệt độ", f"{t}°C")
+
+with col2:
+    st.metric("💧 Độ ẩm", f"{h}%")
+
+with col3:
+    st.write("**Thời tiết thực tế**")
+    st.info(desc)
+
+st.divider()
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -560,6 +599,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
