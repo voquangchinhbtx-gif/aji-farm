@@ -351,79 +351,85 @@ elif menu == "📦 Kho vật tư":
     else:
         st.info("Chưa có loại phân thuốc nào trong kho.")
 # ==========================================
-# 13. QUY TRÌNH & NHẮC NHỞ (BẢN FIX 502)
+# 13. QUY TRÌNH & TỐI ƯU HÓA (BẢN BIẾT NÓI)
 # ==========================================
 elif menu == "📋 Quy trình & Nhắc nhở":
     st.header("📋 Quy trình & Tối ưu hóa phân bón")
 
-    # Tạo các tab
     tab_guide, tab_task = st.tabs(["📖 Sổ tay & Nhật ký", "🔔 Nhắc việc của tôi"])
 
     with tab_guide:
-        st.info("💡 Quy trình tự động cập nhật từ dữ liệu cộng đồng.")
+        st.info("💡 Hệ thống tổng hợp kinh nghiệm từ cộng đồng để đưa ra loại phân bón hiệu quả nhất.")
         
-        # 1. Khởi tạo dữ liệu mặc định (Tránh lỗi nếu kho trống)
-        supplies_info = []
-        all_names = []
-        if data.get("supplies"):
-            for s in data["supplies"]:
-                name = s.get('name', '')
-                note = s.get('note', '')
-                supplies_info.append(f"{name} {note}".lower())
-                all_names.append(name)
+        # 1. Thu thập dữ liệu từ kho cộng đồng
+        all_supplies = data.get("supplies", [])
+        all_names = [s['name'] for s in all_supplies]
 
-        # 2. Danh mục quy trình
+        # 2. Danh mục quy trình - Nơi chứa "Kiến thức thực tế"
         standard_guides = [
-            {"Giai đoạn": "🌱 Cây con", "Key": "rễ", "HD": "Pha 1:40, tưới gốc.", "Gợi ý": "Dịch chuối"},
-            {"Giai đoạn": "🌿 Phát triển", "Key": "đạm", "HD": "Bón 10 ngày/lần.", "Gợi ý": "Đạm cá"},
-            {"Giai đoạn": "🛡️ Phòng bệnh", "Key": "nấm", "HD": "Xịt ngay sau mưa.", "Gợi ý": "Nano Bạc"}
+            {
+                "Giai đoạn": "🌱 Cây con (1-30 ngày)",
+                "Từ khóa": ["rễ", "chuối", "humic"],
+                "HD": "Pha 5ml/1L nước. Tưới gốc lúc 6h-7h sáng để kích rễ mạnh.",
+                "Mặc định": "Dịch chuối"
+            },
+            {
+                "Giai đoạn": "🌿 Phát triển (30-60 ngày)",
+                "Từ khóa": ["đạm", "lá", "cá", "tăng trưởng"],
+                "HD": "Pha 1:200. Phun mặt dưới lá định kỳ 10 ngày để vươn cành.",
+                "Mặc định": "Đạm cá"
+            },
+            {
+                "Giai đoạn": "🌼 Ra hoa (60-90 ngày)",
+                "Từ khóa": ["hoa", "bông", "trứng", "sữa", "canxi"],
+                "HD": "Phun trực tiếp vào chùm hoa lúc chưa nở. Giúp chống rụng bông.",
+                "Mặc định": "Dịch Trứng Sữa"
+            },
+            {
+                "Giai đoạn": "🛡️ Phòng bệnh",
+                "Từ khóa": ["nấm", "khuẩn", "nano", "bạc", "trĩ"],
+                "HD": "Xịt ngay sau mưa dầm. Ngăn ngừa nấm thán thư Kim Long.",
+                "Mặc định": "Nano Bạc"
+            }
         ]
 
-        # 3. Xây dựng danh sách hiển thị (Cách này an toàn hơn pd.DataFrame trực tiếp)
-        final_list = []
+        # 3. Logic Phân tích & Hiển thị
+        refined_data = []
         for g in standard_guides:
-            # Kiểm tra kho
-            status = "❌ Hết hàng"
-            for info in supplies_info:
-                if g["Key"] in info:
-                    status = "✅ Sẵn có"
-                    break
+            # Tìm loại phân phổ biến nhất dựa trên dữ liệu cộng đồng (all_names)
+            matching_items = [n for n in all_names if any(k in n.lower() for k in g["Từ khóa"])]
             
-            # Đề xuất cộng đồng
-            popular = g["Gợi ý"]
-            matches = [n for n in all_names if g["Key"] in n.lower()]
-            if matches:
-                popular = max(set(matches), key=matches.count)
+            # Loại phân hiệu quả nhất dựa trên số đông người dùng
+            most_common = max(set(matching_items), key=matching_items.count) if matching_items else g["Mặc định"]
+            
+            # Kiểm tra trạng thái kho cá nhân của bạn
+            my_stock = "✅ Đã có" if matching_items else "❌ Cần mua"
 
-            final_list.append({
+            refined_data.append({
                 "Giai đoạn": g["Giai đoạn"],
-                "Hướng dẫn": g["HD"],
-                "Trạng thái": status,
-                "Loại hiệu quả nhất": popular
+                "Hướng dẫn kỹ thuật (Cụ thể)": g["HD"],
+                "Loại phân tối ưu (Số đông tin dùng)": most_common,
+                "Trạng thái kho": my_stock
             })
-        
-        # Hiển thị bảng
-        st.table(final_list)
 
-        # --- PHẦN NHẬT KÝ ---
+        # Hiển thị bảng phân tích
+        st.table(refined_data)
+
+        # 4. Phần thực hiện bón (Nhật ký)
         st.divider()
-        st.subheader("🚀 Nhật ký thực hiện")
-        
-        if data.get("supplies") and data.get("plants"):
-            with st.form("form_action_v3"):
+        st.subheader("🚀 Xác nhận bón phân / Phun thuốc")
+        if all_supplies:
+            with st.form("action_v4"):
                 c1, c2 = st.columns(2)
-                p_choice = c1.selectbox("Chọn cây", ["Tất cả"] + [p['name'] for p in data['plants']])
-                s_choice = c2.selectbox("Loại dùng", [s['name'] for s in data['supplies']])
-                if st.form_submit_button("Xác nhận"):
+                p_choice = c1.selectbox("Bón cho cây", ["Tất cả vườn"] + [p['name'] for p in data.get('plants', [])])
+                s_choice = c2.selectbox("Loại phân thực tế sử dụng", all_names)
+                if st.form_submit_button("Ghi nhận thực hiện"):
                     if "care_history" not in data: data["care_history"] = []
                     data["care_history"].append({"plant": p_choice, "supply": s_choice, "date": str(date.today())})
                     save_data(data)
-                    st.success("Đã ghi nhật ký!")
+                    st.success(f"Đã lưu: {p_choice} bón {s_choice}")
                     st.rerun()
 
-    with tab_task:
-        st.subheader("🔔 Ghi chú việc cần làm")
-        # Giữ phần code nhắc việc của bạn ở đây...
 
 
 
