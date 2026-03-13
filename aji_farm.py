@@ -2,588 +2,288 @@ import streamlit as st
 import requests
 import os
 import json
+import pandas as pd
+from datetime import date
 from streamlit_js_eval import get_geolocation
 
 # =============================
-# 1. CẤU HÌNH HỆ THỐNG
+# 1. CẤU HÌNH
 # =============================
+
 try:
-    st.set_page_config(page_title="Aji Farm", layout="wide")
+    st.set_page_config(page_title="Aji Farm", layout="wide", page_icon="🌶️")
 except:
     pass
 
 DATA_FILE = "farm_data.json"
 API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
-# Khởi tạo dữ liệu vườn
+# =============================
+# 2. LOAD DATA
+# =============================
+
 if "data" not in st.session_state:
+
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            st.session_state.data = json.load(f)
+        with open(DATA_FILE,"r",encoding="utf-8") as f:
+            st.session_state.data=json.load(f)
+
     else:
-        st.session_state.data = {"plants": []}
+        st.session_state.data={"plants":[]}
 
 def save_data():
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(st.session_state.data, f, ensure_ascii=False, indent=2)
+
+    with open(DATA_FILE,"w",encoding="utf-8") as f:
+        json.dump(st.session_state.data,f,ensure_ascii=False,indent=2)
+
+
+# =============================
+# 3. WEATHER
+# =============================
 
 @st.cache_data(ttl=600)
-def get_weather(lat, lon):
+def get_weather(lat,lon):
+
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
-        return requests.get(url, timeout=10).json()
+        url=f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+
+        r=requests.get(url,timeout=10)
+
+        return r.json()
+
     except:
         return None
 
-# =============================
-# 2. QUẢN LÝ TRẠNG THÁI (GPS)
-# =============================
 
-# Placeholder này là "kháng thể" chống lặp giao diện
-placeholder = st.empty()
+# =============================
+# 4. GPS
+# =============================
 
 if "location" not in st.session_state:
-    st.session_state.location = get_geolocation()
+    st.session_state.location=None
 
-loc = st.session_state.location
+if st.session_state.location is None:
+    loc=get_geolocation()
+
+    if loc:
+        st.session_state.location=loc
+
+loc=st.session_state.location
+
 
 # =============================
-# 3. XỬ LÝ LOGIC UI
+# 5. WEATHER DATA
 # =============================
 
-# Dữ liệu hiển thị mặc định (trong lúc chờ GPS)
-info = {"t": 25, "h": 80, "d": "Đang lấy tọa độ từ trình duyệt...", "c": "Huế"}
+info={
+"city":"Vườn Aji",
+"temp":25,
+"hum":80,
+"wind":0,
+"desc":"Đang lấy dữ liệu thời tiết"
+}
 
 if loc and "coords" in loc:
-    weather = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
-    if weather and weather.get("cod") == 200:
-        info = {
-            "t": weather["main"]["temp"],
-            "h": weather["main"]["humidity"],
-            "d": weather["weather"][0]["description"].capitalize(),
-            "c": weather["name"]
+
+    lat=loc["coords"]["latitude"]
+    lon=loc["coords"]["longitude"]
+
+    w=get_weather(lat,lon)
+
+    if w and w.get("cod")==200:
+
+        info["city"]=w.get("name","Vườn")
+        info["temp"]=w["main"]["temp"]
+        info["hum"]=w["main"]["humidity"]
+        info["wind"]=w.get("wind",{}).get("speed",0)
+        info["desc"]=w["weather"][0]["description"].capitalize()
+
+
+# =============================
+# 6. UI
+# =============================
+
+st.title("🌶️ Aji Farm Management")
+
+# ===== WEATHER =====
+
+st.subheader(f"📍 {info['city']}")
+
+c1,c2,c3=st.columns(3)
+
+c1.metric("🌡 Nhiệt độ",f"{info['temp']} °C")
+c2.metric("💧 Độ ẩm",f"{info['hum']} %")
+c3.metric("💨 Gió",f"{info['wind']} m/s")
+
+st.info(info["desc"])
+
+st.divider()
+
+
+# =============================
+# 7. THÊM CÂY
+# =============================
+
+st.subheader("🌱 Thêm cây trồng")
+
+with st.form("add_plant"):
+
+    col1,col2=st.columns(2)
+
+    with col1:
+
+        plant_type=st.selectbox(
+        "Nhóm cây",
+        ["Rau","Gia vị","Cây dây leo","Cây thân bụi","Cây thân gỗ","Cây ăn trái","Cây cảnh"]
+        )
+
+        species=st.text_input("Loài cây")
+
+        variety=st.text_input("Giống")
+
+    with col2:
+
+        location=st.text_input("Khu trồng")
+
+        plant_date=st.date_input("Ngày trồng",date.today())
+
+        age=st.number_input("Tuổi cây (năm)",0,100,0)
+
+    submit=st.form_submit_button("➕ Thêm cây")
+
+    if submit:
+
+        plant={
+
+        "type":plant_type,
+        "species":species,
+        "variety":variety,
+        "location":location,
+        "plant_date":str(plant_date),
+        "age_years":age
+
         }
 
-# Đẩy toàn bộ giao diện vào placeholder
-with placeholder.container():
-    st.title("🌶️ Aji Charapita Farm Management")
-    
-    # Khu vực Thời tiết
-    st.subheader(f"📍 {info['c']}")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("🌡️ Nhiệt độ", f"{info['t']}°C")
-    c2.metric("💧 Độ ẩm", f"{info['h']}%")
-    st.info(f"Dự báo: {info['d']}")
+        st.session_state.data["plants"].append(plant)
 
-    st.divider()
+        save_data()
 
-    # Khu vực Quản lý vườn
-    st.subheader("🌿 Quản lý vườn cây")
-    st.write(f"Tổng số cây hiện có: **{len(st.session_state.data['plants'])}**")
+        st.success("Đã thêm cây")
 
-    # Nhập liệu gọn gàng
-    col_in, col_btn = st.columns([4, 1])
-    with col_in:
-        new_plant = st.text_input("Tên cây mới", placeholder="Ví dụ: Cây ớt khu A...", label_visibility="collapsed")
-    with col_btn:
-        if st.button("➕ Thêm", use_container_width=True):
-            if new_plant:
-                st.session_state.data["plants"].append(new_plant)
-                save_data()
-                st.rerun()
-
-    # Danh sách cây trồng
-    if st.session_state.data["plants"]:
-        with st.expander("📖 Xem danh sách chi tiết"):
-            for i, p in enumerate(st.session_state.data["plants"]):
-                st.write(f"{i+1}. 🌱 {p}")
-
-# ==========================================
-# 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
-# ==========================================
-from datetime import datetime, date
-
-def get_alerts(temp, humi, w_code, plants):
-    alerts = []
-
-    # Kiểm tra mã mưa (51–99 là mưa)
-    if w_code >= 51:
-        alerts.append("🌧️ **TRỜI ĐANG MƯA:** Kiểm tra thoát nước gốc, tránh để ớt úng rễ!")
-        alerts.append("🚨 **NẤM BỆNH:** Sau mưa cần kiểm tra nấm trắng trên lá!")
-
-    if temp > 33:
-        alerts.append("🌡️ Nắng nóng mạnh — cần che lưới")
-
-    if temp > 30 and humi < 60:
-        alerts.append("🚨 Nguy cơ bọ trĩ cao")
-
-    if temp > 28 and humi > 85 and w_code < 51:  # Ẩm cao nhưng không mưa
-        alerts.append("🚨 Nguy cơ nấm bệnh do độ ẩm cao")
-
-    # Nhắc lịch bón phân theo tuổi cây
-    for p in plants:
-        try:
-            d = datetime.strptime(p["date"], "%Y-%m-%d").date()
-            age = (date.today() - d).days
-
-            if age > 0 and age % 15 == 0:
-                alerts.append(f"🌿 {p['name']} {age} ngày: bón phân hữu cơ")
-
-        except:
-            pass
-
-    return alerts
-
-# ==========================================
-# 6. SIDEBAR
-# ==========================================
-st.sidebar.title("🌶️ Aji Farm Pro")
-
-st.sidebar.write("Ngày:",date.today().strftime("%d/%m/%Y"))
-
-menu=st.sidebar.selectbox("Menu",[
-"📊 Dashboard",
-"🌱 Quản lý cây",
-"📋 Quy trình & Nhắc nhở",    
-"📦 Kho vật tư",
-"📷 AI chẩn đoán",
-"🧺 Thu hoạch",
-"💰 Tài chính"
-])
-
-# ==========================================
-# 7. DASHBOARD
-# ==========================================
-if menu == "📊 Dashboard":
-
-    st.header("📊 Trung tâm điều khiển")
-
-    # Hàm lấy thời tiết
-    def get_weather():
-        lat, lon = 16.46, 107.59
-        api_key = "YOUR_OPENWEATHERMAP_API_KEY"
-
-        try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang=vi"
-            res = requests.get(url, timeout=5).json()
-
-            if res.get("cod") == 200:
-                temp = res["main"]["temp"]
-                humi = res["main"]["humidity"]
-                w_code = res["weather"][0]["id"]
-
-                return temp, humi, w_code
-
-        except:
-            pass
-
-        # fallback
-        return 25, 80, 0
+        st.rerun()
 
 
-    # Lấy dữ liệu thời tiết
-    temp, humi, w_code = get_weather()
+# =============================
+# 8. DANH SÁCH CÂY
+# =============================
 
-    c1, c2 = st.columns(2)
-    c1.metric("Nhiệt độ", f"{temp}°C")
-    c2.metric("Độ ẩm", f"{humi}%")
+st.subheader("🌿 Danh sách cây trong vườn")
 
-    # Hiển thị trạng thái thời tiết
-    if w_code >= 51:
-        st.info("🌧️ Hiện tại Kim Long đang có mưa")
-    elif w_code == 0:
-        st.info("☀️ Trời đang nắng đẹp")
+plants=st.session_state.data["plants"]
+
+if plants:
+
+    df=pd.DataFrame(plants)
+
+    st.dataframe(df,use_container_width=True)
+
+else:
+
+    st.info("Chưa có cây nào trong vườn")
+
+
+# =============================
+# 9. THỐNG KÊ
+# =============================
+
+if plants:
+
+    st.subheader("📊 Thống kê vườn")
+
+    df=pd.DataFrame(plants)
+
+    chart=df["type"].value_counts()
+
+    st.bar_chart(chart)
+# =============================
+# 10. DỰ BÁO DỊCH TỄ CHUYÊN SÂU
+# =============================
+
+st.divider()
+st.subheader("🔮 Hệ thống Dự báo Dịch tễ học")
+
+# Lấy dữ liệu môi trường
+T = info.get("temp", 25)
+H = info.get("hum", 70)
+W = info.get("wind", 0)
+
+# =============================
+# MÔ HÌNH PHÂN TÍCH
+# =============================
+
+# 1️⃣ Thán thư (Anthracnose)
+anthracnose_ri = (H / 100) * (1.2 if 22 <= T <= 28 else 0.6)
+anthracnose_ri = min(anthracnose_ri, 1.0)
+
+# 2️⃣ Phấn trắng (Powdery Mildew)
+powdery_ri = ((100 - H) / 100) * (1.1 if 15 <= T <= 25 else 0.4)
+
+# Gió giúp phát tán bào tử
+if W > 3:
+    powdery_ri *= 1.2
+
+powdery_ri = min(powdery_ri, 1.0)
+
+# =============================
+# HIỂN THỊ
+# =============================
+
+col_a, col_b = st.columns(2)
+
+with col_a:
+
+    st.write("🛡 **Chỉ số Thán thư (Anthracnose)**")
+
+    st.progress(anthracnose_ri)
+
+    if anthracnose_ri > 0.7:
+        st.error("🚨 NGUY CƠ CAO: Điều kiện lý tưởng cho nấm thán thư bùng phát.")
+    elif anthracnose_ri > 0.4:
+        st.warning("⚠️ CẢNH BÁO: Môi trường bắt đầu thuận lợi cho nấm.")
     else:
-        st.info("☁️ Trời nhiều mây")
+        st.success("✅ AN TOÀN: Khả năng bùng phát thấp.")
 
-    st.divider()
+with col_b:
 
-    total_yield = sum(y["amount"] for y in data["yields"])
-    total_cost = sum(e["amount"] for e in data["expenses"])
+    st.write("🛡 **Chỉ số Phấn trắng (Powdery Mildew)**")
 
-    c3, c4, c5 = st.columns(3)
+    st.progress(powdery_ri)
 
-    c3.metric("Số cây", len(data["plants"]))
-    c4.metric("Tổng thu hoạch", f"{total_yield} g")
-    c5.metric("Chi phí", f"{total_cost:,} đ")
-
-    st.subheader("Cảnh báo hôm nay")
-
-    alerts = get_alerts(temp, humi, w_code, data["plants"])
-
-    if alerts:
-        for a in alerts:
-            st.warning(a)
+    if powdery_ri > 0.7:
+        st.error("🚨 NGUY CƠ CAO: Thời tiết khô và gió mạnh → nấm dễ phát tán.")
+    elif powdery_ri > 0.4:
+        st.warning("⚠️ Có điều kiện phát sinh nấm phấn trắng.")
     else:
-        st.success("Vườn đang ổn định")
-# ==========================================
-# 8. QUẢN LÝ CÂY
-# ==========================================
-elif menu == "🌱 Quản lý cây":
-    st.header("🌱 Danh sách cây")
+        st.success("✅ Môi trường hiện khá an toàn.")
 
-    # --- 1. Form thêm cây mới ---
-    with st.form("add_plant"):
-        name = st.text_input("Tên cây / chậu")
-        d = st.date_input("Ngày trồng", value=date.today())
+# =============================
+# CHU KỲ DỊCH TỄ THEO MÙA
+# =============================
 
-        submitted = st.form_submit_button("Thêm cây mới")
+st.write("---")
+st.write("📅 **Dự báo rủi ro theo chu kỳ mùa (Dữ liệu nông nghiệp mở)**")
 
-        if submitted and name:
-            data["plants"].append({
-                "name": name,
-                "date": str(d)
-            })
-            save_data(data)
-            st.success(f"Đã thêm cây {name}!")
-            st.rerun()
+seasonal_risk = pd.DataFrame({
+    "Tháng": list(range(1, 13)),
+    "Sâu hại (Bọ trĩ)": [0.8,0.9,0.7,0.4,0.2,0.1,0.2,0.3,0.5,0.6,0.7,0.8],
+    "Nấm bệnh (Mưa nhiều)": [0.1,0.2,0.4,0.6,0.8,0.9,0.7,0.8,0.9,0.7,0.4,0.2]
+})
 
-    st.divider()
+st.line_chart(seasonal_risk.set_index("Tháng"))
 
-    # --- 2. Hiển thị danh sách cây ---
-    if data.get("plants"):
-        for i, p in enumerate(data["plants"]):
-
-            # Tính tuổi cây
-            d_obj = datetime.strptime(p["date"], "%Y-%m-%d").date()
-            age = (date.today() - d_obj).days
-
-            c1, c2 = st.columns([4,1])
-
-            c1.write(f"**{p['name']}** — {age} ngày tuổi")
-
-            if c2.button("Xóa", key=f"del_{i}"):
-                data["plants"].pop(i)
-                save_data(data)
-                st.rerun()
-
-    else:
-        st.info("Chưa có cây nào trong danh sách. Hãy thêm cây ở phía trên!")
-# ==========================================
-# 9. AI CHẨN ĐOÁN
-# ==========================================
-elif menu=="📷 AI chẩn đoán":
-
-    st.header("📷 AI bắt bệnh lá")
-
-    img_file=st.camera_input("Chụp lá")
-
-    if img_file:
-
-        img=Image.open(img_file)
-
-        st.image(img,width=400)
-
-        if st.button("Phân tích"):
-
-            if model:
-
-                with st.spinner("AI đang phân tích..."):
-
-                    try:
-
-                        prompt="""
-Bạn là chuyên gia nông nghiệp về ớt Aji Charapita.
-
-Hãy phân tích:
-1 bệnh gì
-2 thiếu chất gì
-3 cách xử lý hữu cơ an toàn
-"""
-
-                        res=model.generate_content([prompt,img])
-
-                        st.success("Kết quả")
-
-                        st.write(res.text)
-
-                    except:
-
-                        st.error("AI lỗi")
-
-            else:
-
-                st.error("Chưa cấu hình API")
-
-# ==========================================
-# 10. AI CHẨN ĐOÁN BỆNH (BẢN CẬP NHẬT CUỐI)
-# ==========================================
-elif menu == "📷 AI chẩn đoán":
-    st.header("📸 Chẩn đoán bệnh bằng AI")
-    
-    img_file = st.camera_input("Chụp ảnh lá hoặc thân cây ớt")
-    
-    if img_file is not None:
-        # 1. Hiển thị ảnh ngay để người dùng yên tâm
-        img = Image.open(img_file)
-        st.image(img, caption="Ảnh đang phân tích", use_container_width=True)
-        
-        if st.button("🚀 Bắt đầu phân tích"):
-            with st.spinner("Đang gửi ảnh sang hệ thống AI..."):
-                try:
-                    # 2. Cấu hình Model
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    
-                    # 3. Phân tích trực tiếp bằng đối tượng Image của PIL
-                    prompt = """
-                    Bạn là chuyên gia nông nghiệp cho giống ớt Aji Charapita. 
-                    Nhìn vào ảnh này, hãy chẩn đoán tình trạng sức khỏe của cây:
-                    1. Tên bệnh hoặc loại sâu/nấm (nếu có).
-                    2. Cách xử lý hữu cơ (dùng Nano bạc, Neem oil, hoặc cách tự nhiên).
-                    Nếu ảnh không rõ, hãy yêu cầu người dùng chụp lại gần lá hơn.
-                    """
-                    
-                    # Gửi ảnh đi (Gemini 1.5 Flash hỗ trợ gửi thẳng đối tượng PIL Image)
-                    response = model.generate_content([prompt, img])
-                    
-                    st.success("🤖 AI Phản hồi:")
-                    st.markdown(response.text)
-                    
-                except Exception as e:
-                    # Hiển thị lỗi chi tiết để mình biết đường sửa
-                    st.error("❌ Lỗi phân tích!")
-                    with st.expander("Chi tiết lỗi cho kỹ thuật"):
-                        st.code(str(e))
-                    st.info("Hãy thử kiểm tra lại API Key trong mục Secrets của Streamlit nhé.")
-
-# ==========================================
-# 11. TÀI CHÍNH
-# ==========================================
-elif menu=="💰 Tài chính":
-
-    st.header("💰 Chi phí")
-
-    with st.form("exp"):
-
-        item=st.text_input("Vật tư")
-
-        price=st.number_input("Số tiền",min_value=0)
-
-        if st.form_submit_button("Lưu") and item and price>0:
-
-            data["expenses"].append({
-                "item":item,
-                "amount":price
-            })
-
-            save_data(data)
-
-            st.rerun()
-
-    if data["expenses"]:
-
-        df=pd.DataFrame(data["expenses"])
-
-        chart=df.groupby("item")["amount"].sum()
-
-        st.bar_chart(chart)
-
-        st.table(df)
-# ==========================================
-# 12. KHO VẬT TƯ (PHÂN & THUỐC)
-# ==========================================
-elif menu == "📦 Kho vật tư":
-    st.header("📦 Quản lý Phân bón & Thuốc")
-    
-    with st.form("add_supply"):
-        col1, col2 = st.columns(2)
-        s_name = col1.text_input("Tên phân/thuốc (Vd: Đạm cá, Nano Bạc...)")
-        s_qty = col2.text_input("Số lượng còn lại (Vd: 2 lít, 500g...)")
-        s_note = st.text_input("Ghi chú công dụng (Vd: Bón lá, trị nấm...)")
-        
-        if st.form_submit_button("Lưu vào kho") and s_name:
-            data["supplies"].append({
-                "name": s_name,
-                "qty": s_qty,
-                "note": s_note
-            })
-            save_data(data)
-            st.rerun()
-
-    st.divider()
-    
-    if data.get("supplies"):
-        for i, s in enumerate(data["supplies"]):
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([3, 2, 1])
-                c1.write(f"🧪 **{s['name']}**")
-                c1.caption(f"📝 {s['note']}")
-                c2.write(f"🔢 Còn lại: {s['qty']}")
-                if c3.button("Xóa", key=f"sup_{i}"):
-                    data["supplies"].pop(i)
-                    save_data(data)
-                    st.rerun()
-    else:
-        st.info("Chưa có loại phân thuốc nào trong kho.")
-# ==========================================
-# 13. DỰ BÁO DỊCH TỄ HỌC NÔNG NGHIỆP
-# ==========================================
-import streamlit as st
-import requests
-import pandas as pd  # ✅ Giải quyết thiếu import
-from streamlit_js_eval import get_geolocation
-
-# --- CẤU HÌNH BAN ĐẦU ---
-API_KEY_WEATHER = "66ad043d6024749fa4bf92f0a6782397"
-
-# Giả lập hoặc khởi tạo biến data để tránh NameError ✅
-if 'data' not in locals():
-    data = {"disease_map": []} 
-
-if menu == "📋 Quy trình & Nhắc nhở":
-    st.header("🔮 Hệ thống Dự báo & Phân tích Dịch tễ")
-
-    # 1. GPS & THỜI TIẾT (Xử lý an toàn)
-    loc = get_geolocation(key='gps_risk_analysis') # ✅ Dùng key duy nhất
-    
-    # Giá trị mặc định
-    temp, humidity, desc, city = 25, 80, "Không có dữ liệu", "Vị trí hiện tại"
-
-    if loc and "coords" in loc:
-        lat, lon = loc['coords']['latitude'], loc['coords']['longitude']
-        try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY_WEATHER}&units=metric&lang=vi"
-            res = requests.get(url, timeout=5) # ✅ Kiểm tra lỗi mạng
-            res.raise_for_status() 
-            w_data = res.json()
-            
-            if w_data.get("cod") == 200:
-                temp = w_data['main']['temp']
-                humidity = w_data['main']['humidity']
-                desc = w_data['weather'][0]['description']
-                city = w_data.get("name", "Kim Long")
-        except Exception as e:
-            st.sidebar.error(f"⚠️ Không thể cập nhật thời tiết: {e}")
-
-    # 2. RISK SCORE THÔNG MINH
-    risk_score = 0
-    if humidity > 90: risk_score += 2
-    elif humidity > 80: risk_score += 1
-    if "mưa" in desc.lower(): risk_score += 1
-    if temp > 34: risk_score += 1
-
-    # 3. DASHBOARD TỔNG QUAN
-    st.subheader(f"📊 Dashboard Vườn: {city}")
-    m1, m2, m3 = st.columns(3)
-    
-    # Hiển thị màu sắc theo mức độ nguy cơ ✅
-    risk_color = "normal" 
-    if risk_score >= 3: risk_color = "inverse"
-    
-    m1.metric("Chỉ số nguy cơ", f"{risk_score}/4", delta="NGUY HIỂM" if risk_score >= 3 else "AN TOÀN", delta_color=risk_color)
-    m2.metric("Nhiệt độ", f"{temp}°C")
-    m3.metric("Độ ẩm", f"{humidity}%")
-    
-    # Cảnh báo trực quan
-    if risk_score >= 3:
-        st.error("🚨 **CẢNH BÁO:** Điều kiện cực kỳ thuận lợi cho nấm bệnh (Thán thư, Phấn trắng). Cần phun phòng ngay!")
-    elif risk_score == 2:
-        st.warning("⚠️ **CHÚ Ý:** Độ ẩm cao. Hãy tăng cường thông thoáng cho vườn ớt.")
-    else:
-        st.success("✅ **AN TOÀN:** Thời tiết đang ủng hộ vườn ớt Aji Charapita của bạn.")
-
-    # 4. PHÂN TÍCH DỮ LIỆU LỊCH SỬ ✅
-    st.divider()
-    if data.get("disease_map"):
-        df_map = pd.DataFrame(data["disease_map"])
-        df_map["date"] = pd.to_datetime(df_map["date"])
-        
-        tab1, tab2, tab3 = st.tabs(["🗺️ Bản đồ ổ bệnh", "📈 Diễn biến dịch", "📊 Thống kê cây"])
-        
-        with tab1:
-            # Kiểm tra dữ liệu Map trước khi hiển thị ✅
-            if not df_map[['lat', 'lon']].dropna().empty:
-                st.map(df_map.dropna(subset=["lat", "lon"])[["lat", "lon"]])
-            else:
-                st.info("Chưa có tọa độ GPS cho các ổ bệnh ghi nhận.")
-        
-        with tab2:
-            st.write("📅 **Số ca bệnh theo ngày**")
-            cases_by_day = df_map.groupby(df_map["date"].dt.date).size()
-            st.line_chart(cases_by_day)
-        
-        with tab3:
-            c1, c2 = st.columns(2)
-            c1.write("🔥 **Loại bệnh**")
-            c1.bar_chart(df_map["disease"].value_counts())
-            c2.write("🌱 **Cây bị nhiễm**")
-            c2.bar_chart(df_map["plant"].value_counts())
-    else:
-        st.info("ℹ️ Hệ thống chưa ghi nhận lịch sử dịch tễ. Các biểu đồ sẽ xuất hiện khi có dữ liệu bệnh hại.")
-
-# ==========================================
-# 14. AI CHẨN ĐOÁN (ROBUST VISION AI)
-# ==========================================
-elif menu == "📷 AI Chẩn đoán bệnh":
-
-    st.header("🔬 AI Chẩn đoán & Ghi nhận Thực địa")
-
-    loc_ai = get_geolocation()
-    lat_ai, lon_ai = (loc_ai['coords']['latitude'], loc_ai['coords']['longitude']) if loc_ai else (0, 0)
-
-    img_file = st.camera_input("📸 Chụp ảnh bộ phận nghi ngờ bệnh")
-
-    if img_file:
-
-        image = Image.open(img_file)
-        st.image(image, caption="Ảnh hiện trường", use_column_width=True)
-
-        with st.spinner("🤖 AI đang phân tích đa tầng..."):
-
-            predictions = []
-            reliable_preds = []
-
-            try:
-                model = genai.GenerativeModel("gemini-1.5-flash")
-
-                prompt = """
-Trả về DUY NHẤT JSON list 3 bệnh khả năng cao nhất cho cây trồng trong ảnh:
-
-[
- {"plant":"Tên cây","disease":"Tên bệnh","confidence":80,"organic_guide":"Hướng dẫn hữu cơ","source":"FAO/CABI"}
-]
-
-Chỉ dùng giải pháp sinh học/hữu cơ.
-"""
-
-                response = model.generate_content([prompt, image])
-
-                # Tách JSON an toàn
-                match = re.search(r'\[.*\]', response.text, re.DOTALL)
-
-                if match:
-                    predictions = json.loads(match.group())
-
-            except Exception as e:
-                st.error("AI phân tích thất bại")
-
-        # Lọc kết quả đáng tin cậy
-        reliable_preds = [p for p in predictions if p.get("confidence", 0) > 60]
-
-        if reliable_preds:
-
-            st.success("✅ Tìm thấy bệnh có độ tin cậy cao")
-
-            top = reliable_preds[0]
-
-            st.write(f"🌿 Cây: {top.get('plant','Không rõ')}")
-            st.write(f"🦠 Bệnh: {top.get('disease','Không rõ')}")
-            st.write(f"📊 Độ tin cậy: {top.get('confidence',0)}%")
-            st.write(f"🌱 Giải pháp hữu cơ: {top.get('organic_guide','')}")
-
-            new_case = {
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                "plant": top.get("plant", "Không rõ"),
-                "disease": top.get("disease", "Bệnh lạ"),
-                "lat": lat_ai,
-                "lon": lon_ai
-            }
-
-            data["disease_map"].append(new_case)
-            save_data(data)
-
-        else:
-            st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+st.caption(
+"ℹ️ Mô hình dự báo dựa trên sự kết hợp giữa dữ liệu thời tiết thực và mô hình dịch tễ cây trồng."
+)
 
 
 
