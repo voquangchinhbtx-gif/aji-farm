@@ -278,34 +278,102 @@ if st.checkbox("📖 Xem lịch sử"):
         st.dataframe(df_l.sort_values("date", ascending=False), use_container_width=True)
 
 # =========================================================
-# 13 & 14. AI HỌC LỆNH & FEEDBACK
+# 13 & 14. AI HỌC LỆNH & ĐỀ XUẤT QUY TRÌNH (BẢN TINH CHỈNH)
 # =========================================================
 st.divider()
 st.subheader("🧬 AI Học & Đề xuất Quy trình")
-if plants:
-    target_plant = st.selectbox("Chọn cây lập quy trình:", plant_names, key="proc_select")
-    if st.button("🚀 AI Tạo Quy trình chuẩn"):
-        if model:
-            with st.spinner("AI đang tổng hợp..."):
-                try:
-                    res = model.generate_content(f"Quy trình bón phân, sâu bệnh cho {target_plant} trong điều kiện {info}. Tiếng Việt, < 200 từ.")
-                    st.session_state["current_procedure"] = getattr(res, "text", "")
-                    st.session_state["current_plant"] = target_plant
-                    st.markdown(st.session_state["current_procedure"])
-                except:
-                    st.error("Lỗi kết nối AI.")
 
-if st.session_state.get("current_procedure"):
-    with st.form("feedback_form"):
-        score = st.select_slider("Hiệu quả thực tế:", options=["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
-        note = st.text_area("Ghi chú kinh nghiệm:")
-        if st.form_submit_button("💾 Xác nhận"):
-            fb = {"date": str(date.today()), "plant": st.session_state["current_plant"], "score": score, "user_note": note}
-            if "treatment_feedback" not in st.session_state.data: st.session_state.data["treatment_feedback"] = []
-            st.session_state.data["treatment_feedback"].append(fb)
-            save_data()
-            st.session_state.pop("current_procedure", None)
-            st.rerun()
+if not plants:
+    st.info("Thêm cây vào vườn để AI có thể lập quy trình chăm sóc riêng biệt.")
+else:
+    plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
+    target_plant = st.selectbox("Chọn cây cần lập quy trình:", plant_names, key="proc_select")
+    
+    col_proc1, col_proc2 = st.columns([1, 1])
+    
+    with col_proc1:
+        is_proc_loading = st.session_state.get("ai_loading", False)
+        if st.button("🚀 AI Tạo Quy trình chuẩn", use_container_width=True, disabled=is_proc_loading):
+            if model:
+                st.session_state["ai_loading"] = True
+                with st.spinner("AI đang lọc kinh nghiệm riêng cho cây này..."):
+                    try:
+                        # 1️⃣ Lọc kinh nghiệm đúng loại cây được chọn
+                        history = [
+                            h for h in st.session_state.data.get("treatment_feedback", [])
+                            if target_plant in h["plant"]
+                        ][-5:]
+                        
+                        history_text = "\n".join(
+                            [f"- {h['date']}: {h['score']} ({h['user_note']})" for h in history]
+                        ) if history else "Chưa có kinh nghiệm cũ cho cây này."
+                        
+                        # 2️⃣ Giới hạn độ dài prompt tránh tốn token
+                        history_text = history_text[:800]
+
+                        prompt_proc = f"""
+                        Bạn là chuyên gia nông nghiệp.
+                        KINH NGHIỆM THỰC TẾ RIÊNG VỚI {target_plant}:
+                        {history_text}
+
+                        DỮ LIỆU HIỆN TẠI:
+                        - Thời tiết: {info['temp']}°C, ẩm {info['hum']}%, {info['desc']}
+
+                        NHIỆM VỤ: Lập quy trình chăm sóc 7 ngày tới.
+                        YÊU CẦU: Ưu tiên dựa trên kinh nghiệm thực tế cũ để tối ưu. 
+                        Trả lời dạng gạch đầu dòng, tiếng Việt, dưới 120 từ.
+                        """
+                        
+                        res = model.generate_content(prompt_proc)
+                        if hasattr(res, "text"):
+                            st.session_state["current_procedure"] = res.text
+                            st.session_state["current_plant"] = target_plant
+                        else:
+                            st.error("AI không phản hồi.")
+                    except Exception as e:
+                        st.error(f"Lỗi: {e}")
+                    finally:
+                        st.session_state["ai_loading"] = False
+                        st.rerun()
+            else:
+                st.error("Chưa cấu hình API Key.")
+
+    # 3️⃣ Hiển thị quy trình Markdown
+    if st.session_state.get("current_procedure") and st.session_state.get("current_plant") == target_plant:
+        st.markdown("---")
+        st.markdown(f"### 📋 Quy trình đề xuất cho {target_plant}")
+        st.markdown(st.session_state["current_procedure"])
+        
+        with st.expander("⭐ Đánh giá hiệu quả (Để AI học kinh nghiệm)"):
+            with st.form("feedback_form"):
+                score = st.select_slider("Mức độ hiệu quả:", options=["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
+                note = st.text_area("Ghi chú thực tế:")
+                if st.form_submit_button("💾 Lưu kinh nghiệm"):
+                    fb = {
+                        "date": str(date.today()), 
+                        "plant": st.session_state["current_plant"], 
+                        "score": score, 
+                        "user_note": note
+                    }
+                    if "treatment_feedback" not in st.session_state.data: 
+                        st.session_state.data["treatment_feedback"] = []
+                    
+                    st.session_state.data["treatment_feedback"].append(fb)
+                    save_data()
+                    st.success("Đã ghi nhớ kinh nghiệm!")
+                    st.session_state.pop("current_procedure", None)
+                    st.rerun()
+
+# 3️⃣ Hiển thị lịch sử đẹp hơn với dataframe
+if st.checkbox("📚 Xem nhật ký kinh nghiệm AI đã học"):
+    fbs = st.session_state.data.get("treatment_feedback", [])
+    if fbs:
+        df_fb = pd.DataFrame(fbs)
+        # Sắp xếp theo ngày mới nhất lên đầu
+        st.dataframe(df_fb.sort_values("date", ascending=False), use_container_width=True)
+    else:
+        st.info("AI chưa có dữ liệu thực tế để học tập.")
+
 
 
 
