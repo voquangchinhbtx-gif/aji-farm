@@ -423,6 +423,113 @@ if st.checkbox("📖 Xem lịch sử bệnh hại (Mới nhất)"):
         st.dataframe(df_logs, use_container_width=True)
     else:
         st.info("Chưa có nhật ký ghi nhận.")
+import pandas as pd
+import streamlit as st
+from datetime import date
+
+# =========================================================
+# 13. AI HỌC LỆNH & TỐI ƯU QUY TRÌNH (BẢN THIẾT GIÁP)
+# =========================================================
+st.divider()
+st.subheader("🧬 AI Học & Đề xuất Quy trình chuẩn")
+
+# 1. KIỂM TRA NGỮ CẢNH AN TOÀN
+info = st.session_state.get("weather", locals().get("info", {}))
+if "data" not in st.session_state:
+    st.session_state["data"] = {"plants": [], "disease_logs": [], "treatment_feedback": []}
+
+plants = st.session_state.data.get("plants", [])
+
+if not plants:
+    st.info("💡 Hãy thêm cây trồng ở Mục 7 để bắt đầu lộ trình học tập.")
+else:
+    plant_options = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
+    target_plant = st.selectbox("Chọn cây để lập quy trình chuẩn:", plant_options)
+    
+    p_info = next((p for p in plants if f"{p.get('variety')} ({p.get('location')})" == target_plant), None)
+    
+    if not p_info:
+        st.error("❌ Không tìm thấy dữ liệu cây trồng.")
+    else:
+        # Chuẩn hóa tuổi cây
+        d_start = pd.to_datetime(p_info.get('plant_date', str(date.today())))
+        age_days = max(0, (pd.Timestamp.now() - d_start).days)
+        
+        # Xử lý feedback gọn nhẹ cho Prompt
+        user_feedback = st.session_state.data.get("treatment_feedback", [])
+        recent_feedback = [
+            {"score": f.get("score"), "note": f.get("user_note", "")[:100]} 
+            for f in user_feedback[-3:]
+        ]
+
+        if st.button("🚀 AI Tạo Quy trình chuẩn", use_container_width=True):
+            model = globals().get("model", None)
+            if not model:
+                st.error("⚠️ AI chưa được cấu hình API Key.")
+                st.stop()
+
+            with st.spinner("🧠 AI đang tổng hợp kinh nghiệm địa phương..."):
+                try:
+                    learning_prompt = f"""
+                    Bạn là chuyên gia nông nghiệp chính xác.
+                    Dữ liệu cây: {p_info.get('variety')} ({p_info.get('species','Chưa rõ')}), {age_days} ngày tuổi.
+                    Địa phương: {info.get('city', 'Chưa xác định')}, {info.get('temp', '?')}°C.
+                    Kinh nghiệm thực tế: {recent_feedback if recent_feedback else "Chưa có"}.
+
+                    Nhiệm vụ: Tạo quy trình gồm: 1. Giai đoạn sinh trưởng | 2. Bón phân | 3. Sâu bệnh.
+                    Trả lời tiếng Việt, tối đa 200 từ.
+                    """
+
+                    response = model.generate_content(learning_prompt)
+                    res_text = getattr(response, "text", "").strip()
+                    if not res_text:
+                        res_text = "AI chưa đưa ra kết quả. Hãy thử lại."
+                    
+                    # Lưu ngữ cảnh vào session an toàn
+                    st.session_state["current_procedure"] = res_text
+                    st.session_state["current_plant"] = target_plant
+                    
+                    st.success(f"### 📋 Quy trình chuẩn cho {p_info.get('variety')}")
+                    st.markdown(res_text)
+                    
+                except Exception as e:
+                    st.error(f"❌ Lỗi AI: {e}")
+
+# =========================================================
+# 14. VÒNG LẶP PHẢN HỒI (HỌC TỪ THỰC TẾ)
+# =========================================================
+if "current_procedure" in st.session_state:
+    st.divider()
+    st.subheader("⭐ Đánh giá & Dạy AI (Feedback)")
+    
+    with st.form("feedback_loop_form"):
+        score = st.select_slider("Mức độ hiệu quả thực tế:", options=["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
+        note = st.text_area("Ghi chú thực tế (vd: loại phân, nồng độ, kết quả):")
+        
+        if st.form_submit_button("💾 Xác nhận để AI ghi nhớ"):
+            new_feedback = {
+                "date": str(date.today()),
+                "plant": st.session_state.get("current_plant", "Không rõ"),
+                "score": score,
+                "user_note": note,
+                "procedure": st.session_state.get("current_procedure", "")
+            }
+
+            # 1. Đảm bảo key tồn tại trước khi append (Góp ý số 1)
+            if "treatment_feedback" not in st.session_state.data:
+                st.session_state.data["treatment_feedback"] = []
+            
+            st.session_state.data["treatment_feedback"].append(new_feedback)
+            save_data()
+            
+            st.toast("AI đã nạp thêm kinh nghiệm mới!", icon="🧠")
+            
+            # 2. Xóa session_state an toàn bằng pop (Góp ý số 2)
+            st.session_state.pop("current_procedure", None)
+            st.session_state.pop("current_plant", None)
+            
+            # Rerun để làm sạch giao diện
+            st.rerun()
 
 
 
