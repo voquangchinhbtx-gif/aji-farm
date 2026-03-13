@@ -6,95 +6,118 @@ import google.generativeai as genai
 from PIL import Image
 from streamlit_js_eval import get_geolocation
 
+import streamlit as st
+import requests
+import os
+import json
+from streamlit_js_eval import get_geolocation
+
 # ==========================================
-# --- 1. CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Aji Charapita Farm", layout="wide", page_icon="🌶️")
+# 1. CẤU HÌNH HỆ THỐNG (Chạy 1 lần duy nhất)
+# ==========================================
+if 'init' not in st.session_state:
+    st.set_page_config(page_title="Aji Charapita Farm", layout="wide", page_icon="🌶️")
+    st.session_state.init = True
 
 API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 DATA_FILE = "farm_data.json"
 
-# --- 2. HÀM XỬ LÝ DỮ LIỆU (DATABASE) ---
+# ==========================================
+# 2. HÀM XỬ LÝ DỮ LIỆU FILE JSON
+# ==========================================
 def load_data():
-    """Tải dữ liệu từ file JSON, trả về dict mặc định nếu lỗi hoặc không có file."""
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except:
             pass
     return {"plants": [], "yields": [], "expenses": [], "supplies": []}
 
 def save_data(data):
-    """Lưu dữ liệu vào file JSON."""
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# Khởi tạo Session State cho dữ liệu (Chỉ chạy 1 lần khi load trang)
+# Khởi tạo dữ liệu vào Session State
 if "data" not in st.session_state:
     st.session_state.data = load_data()
 
-# --- 3. HÀM THỜI TIẾT (LOGIC) ---
-@st.cache_data(ttl=600)
+# ==========================================
+# 3. HÀM XỬ LÝ THỜI TIẾT (API)
+# ==========================================
+@st.cache_data(ttl=600)  # Lưu kết quả 10 phút để tránh bị khóa API
 def fetch_weather(lat, lon):
-    """Gọi API lấy thời tiết dựa trên tọa độ."""
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
         res = requests.get(url, timeout=5)
         return res.json() if res.status_code == 200 else None
-    except Exception:
+    except:
         return None
 
-# --- 4. XỬ LÝ VỊ TRÍ & DỮ LIỆU THỜI TIẾT (ẨN) ---
-# Lấy tọa độ GPS từ trình duyệt
+# ==========================================
+# 4. GIAO DIỆN CHÍNH (QUAN TRỌNG: CHỐNG LẶP)
+# ==========================================
+st.title("🌶️ Aji Charapita Farm Management")
+
+# Dùng st.empty làm vùng chứa DUY NHẤT để ghi đè nội dung
+main_placeholder = st.empty()
+
+# Lấy tọa độ GPS (Lệnh này kích hoạt rerun)
 loc = get_geolocation()
 
-# Chuẩn bị sẵn thông tin hiển thị (Mặc định)
-weather_display = {
+# Thiết lập thông tin mặc định trước khi có GPS
+weather_info = {
     "temp": 25, 
     "humi": 80, 
     "desc": "Đang xác định vị trí...", 
     "city": "Huế (Mặc định)"
 }
 
-# Nếu có GPS, cập nhật thông tin thật
+# Cập nhật thông tin thật nếu GPS sẵn sàng
 if loc and "coords" in loc:
     lat, lon = loc["coords"]["latitude"], loc["coords"]["longitude"]
-    w_data = fetch_weather(lat, lon)
-    if w_data:
-        weather_display.update({
-            "temp": w_data["main"]["temp"],
-            "humi": w_data["main"]["humidity"],
-            "desc": w_data["weather"][0]["description"].capitalize(),
-            "city": w_data.get("name", "Vườn Kim Long")
+    data_res = fetch_weather(lat, lon)
+    if data_res:
+        weather_info.update({
+            "temp": data_res["main"]["temp"],
+            "humi": data_res["main"]["humidity"],
+            "desc": data_res["weather"][0]["description"].capitalize(),
+            "city": data_res.get("name", "Vườn Kim Long")
         })
 
-# --- 5. GIAO DIỆN HIỂN THỊ (DUY NHẤT 1 LẦN) ---
-st.title("🌶️ Aji Charapita Farm Management")
-
-# Sử dụng st.empty() làm vùng chứa để ghi đè, CHỐNG LẶP GIAO DIỆN
-main_view = st.empty()
-
-with main_view.container():
-    st.subheader(f"📊 Trung tâm điều khiển - {weather_display['city']}")
+# --- HIỂN THỊ TẬP TRUNG TRONG CONTAINER ---
+with main_placeholder.container():
+    st.subheader(f"📊 Trung tâm điều khiển - {weather_info['city']}")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("Nhiệt độ", f"{weather_display['temp']}°C", 
-                  delta="Nóng" if weather_display['temp'] > 32 else None,
-                  delta_color="inverse")
+        st.metric("Nhiệt độ", f"{weather_info['temp']}°C", 
+                  delta="Nóng" if weather_info["temp"] > 32 else "Ổn định",
+                  delta_color="inverse" if weather_info["temp"] > 32 else "normal")
     
     with col2:
-        st.metric("Độ ẩm", f"{weather_display['humi']}%")
+        st.metric("Độ ẩm", f"{weather_info['humi']}%", 
+                  delta="Ẩm cao" if weather_info["humi"] > 85 else "Bình thường")
         
     with col3:
         st.write("**Thời tiết thực tế**")
-        st.info(weather_display["desc"])
+        st.info(f"✨ {weather_info['desc']}")
     
     st.divider()
     
-    # Hiển thị tóm tắt dữ liệu nông trại
-    st.write(f"🌿 Hiện có **{len(st.session_state.data['plants'])}** loại cây đang được theo dõi.")
+    # Phần quản lý dữ liệu (Ví dụ tóm tắt)
+    c_a, c_b = st.columns(2)
+    with c_a:
+        st.write("🌿 **Thống kê cây trồng**")
+        st.write(f"- Tổng số loại: {len(st.session_state.data['plants'])}")
+    with c_b:
+        st.write("📅 **Cập nhật hệ thống**")
+        st.write(f"- Trạng thái: Sẵn sàng")
+
+    # Nút bấm thử nghiệm lưu dữ liệu (để kiểm tra hàm save_data)
+    if st.button("Làm mới dữ liệu"):
+        st.rerun()
 
 # ==========================================
 # 4. WEATHER HUẾ - PHIÊN BẢN CHỐNG CRASH
@@ -723,6 +746,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
