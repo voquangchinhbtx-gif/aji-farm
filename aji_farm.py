@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import os
 import pandas as pd
 import google.generativeai as genai
 from PIL import Image
@@ -669,6 +670,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
