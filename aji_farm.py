@@ -3,18 +3,18 @@ import requests
 import os
 import json
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from streamlit_js_eval import get_geolocation
 import google.generativeai as genai
 from PIL import Image, ImageOps
 import io
 
 # =========================================================
-# 1. STORAGE & SYSTEM (MỤC 1 & 14)
+# 1. HỆ THỐNG LƯU TRỮ (MỤC 1) & QUẢN TRỊ (MỤC 14)
 # =========================================================
-st.set_page_config(page_title="Aji Farm Pro v24.0", layout="wide", page_icon="🌶️")
+st.set_page_config(page_title="Aji Farm Pro v29.0", layout="wide", page_icon="🌶️")
 
-DATA_FILE = "aji_farm_original.json"
+DATA_FILE = "aji_farm_data.json"
 
 def load_data():
     default = {"plants": [], "disease_logs": [], "treatment_feedback": [], "chat_history": []}
@@ -22,7 +22,7 @@ def load_data():
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                # FIX 1: Ép kiểu list cho chat history để không lỗi Tuple
+                # FIX 1: Ép kiểu list cho chat history để không bao giờ bị lỗi Tuple
                 if "chat_history" in data:
                     data["chat_history"] = [list(i) for i in data["chat_history"]]
                 for key in default:
@@ -39,7 +39,7 @@ if "data" not in st.session_state:
     st.session_state.data = load_data()
 
 # =========================================================
-# 2. GPS (MỤC 2) & WEATHER (MỤC 3)
+# 2. ĐỊNH VỊ GPS (MỤC 2) & THỜI TIẾT (MỤC 3)
 # =========================================================
 WEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
@@ -61,7 +61,7 @@ info = {"city": "Vườn Mẫu", "temp": 25, "hum": 80, "wind": 1, "rain": 0, "d
 if loc and "coords" in loc:
     w = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
     if w:
-        # FIX 2: Weather description an toàn qua .get()
+        # FIX 2: Truy cập description an toàn qua .get() để tránh crash
         info = {
             "city": w.get("name", "Vườn"), 
             "temp": w["main"].get("temp", 25),
@@ -74,25 +74,22 @@ if loc and "coords" in loc:
 # =========================================================
 # 3. DASHBOARD (MỤC 4) & ANALYTICS (MỤC 12)
 # =========================================================
-st.title("🌶️ Aji Farm Agri-Intelligence v24.0")
+st.title("🌶️ Aji Farm Agri-Intelligence v29.0")
 plants = st.session_state.data["plants"]
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("🌡 Nhiệt độ", f"{info['temp']}°C")
 m2.metric("💧 Độ ẩm", f"{info['hum']}%")
 m3.metric("🌬️ Gió/Mưa", f"{info['wind']}m/s | {info['rain']}mm")
-m4.metric("🌿 Quy mô", f"{len(plants)} gốc")
+m4.metric("🌿 Quy mô vườn", f"{len(plants)} gốc")
 
-
-
-# 12. Analytics (Bổ sung phần còn thiếu)
 with st.expander("📊 12. PHÂN TÍCH DỮ LIỆU & BIỂU ĐỒ (Analytics)"):
     logs = st.session_state.data.get("disease_logs", [])
     if logs:
         df_l = pd.DataFrame(logs)
-        st.write("**Trend dịch bệnh theo thời gian:**")
+        st.write("**Biểu đồ dịch tễ:**")
         st.line_chart(df_l["date"].value_counts().sort_index())
-    else: st.info("Chưa có dữ liệu nhật ký bệnh để vẽ biểu đồ.")
+    else: st.info("Chưa có dữ liệu nhật ký bệnh.")
 
 # =========================================================
 # 4. DỰ BÁO IPPC (MỤC 5) & NĂNG SUẤT (MỤC 10)
@@ -114,7 +111,6 @@ with c2:
     st.write("**Nguy cơ Phấn trắng**")
     st.progress(risks["Phấn trắng (Mildew)"])
 
-# 10. Yield Prediction
 yield_est = len(plants) * 1.5 * (0.8 if max(risks.values()) > 0.7 else 1.0)
 st.success(f"📈 **10. DỰ BÁO NĂNG SUẤT:** Dự kiến thu hoạch **{yield_est:.1f} kg**")
 
@@ -127,45 +123,38 @@ if plants:
     p_last = plants[-1]
     p_dt = datetime.strptime(p_last.get("date"), "%Y-%m-%d").date()
     age = (date.today() - p_dt).days
-    
-    # Logic tưới AI
-    water = 600 if t > 32 else 400
+    water = 650 if t > 32 else 400
     st.info(f"🌿 Cây **{p_last.get('variety')}**: {age} ngày tuổi. Lượng nước: **{water}ml/gốc**.")
-else: st.info("Vui lòng ghim cây để xem Timeline.")
+else: st.info("Vui lòng ghim cây để kích hoạt Timeline.")
 
 # =========================================================
 # 6. BẢN ĐỒ GIS (MỤC 7) & QUẢN LÝ CÂY (MỤC 8)
 # =========================================================
-
 st.divider()
-c_map, c_list = st.columns([3, 2])
+c_map, c_crud = st.columns([3, 2])
 with c_map:
     st.subheader("🗺️ 7. GARDEN GIS LAYOUT")
     if plants:
         df_m = pd.DataFrame(plants)
         st.map(df_m)
-    else: st.info("Chưa có dữ liệu Map.")
+    else: st.info("Chưa có dữ liệu bản đồ.")
 
-with c_list:
+with c_crud:
     st.subheader("📋 8. QUẢN LÝ DANH SÁCH (CRUD)")
     if plants:
-        st.dataframe(pd.DataFrame(plants)[["variety", "date"]], height=200)
-        if st.button("🗑️ Xóa cây cuối"):
+        st.dataframe(pd.DataFrame(plants)[["variety", "date"]], height=250)
+        if st.button("🗑️ Xóa gốc cuối"):
             st.session_state.data["plants"].pop(); save_data(); st.rerun()
 
 # =========================================================
-# 7. VISION AI (MỤC 11) & DISEASE LOGS (MỤC 12)
+# 7. VISION AI (MỤC 11) & NHẬT KÝ BỆNH (MỤC 12 PHỤ)
 # =========================================================
-
-
-[Image of an integrated pest management flowchart]
-
 st.divider()
 st.subheader("🧠 11. VISION AI & 12. DISEASE LOGS")
 img_f = st.camera_input("Chụp ảnh lá bệnh")
 if img_f:
     img = ImageOps.exif_transpose(Image.open(img_f)).convert("RGB")
-    # FIX 3: Check kích thước ảnh
+    # FIX 3: Check kích thước ảnh để tránh lỗi Vision
     if img.size[0] >= 200:
         img.thumbnail((800, 800))
         if st.button("🔍 AI SOÁT BỆNH"):
@@ -176,11 +165,10 @@ if img_f:
                 res = model.generate_content(["Bệnh gì? Cách trị?", {"mime_type": "image/jpeg", "data": buf.getvalue()}])
                 ans = getattr(res, "text", "AI không xác định được")
                 st.success(ans)
-                # Lưu vào mục 12
                 st.session_state.data["disease_logs"].append({"date": str(date.today()), "diagnosis": ans[:200]})
                 save_data()
             except: st.error("Lỗi Vision AI!")
-    else: st.warning("Ảnh quá mờ hoặc nhỏ.")
+    else: st.warning("Ảnh quá mờ.")
 
 # =========================================================
 # 8. AI CHAT & FEEDBACK (MỤC 13)
@@ -189,9 +177,9 @@ st.divider()
 st.subheader("🤖 13. AI CHAT & FEEDBACK LOOP")
 c_chat, c_feed = st.columns([2, 1])
 with c_chat:
-    q = st.chat_input("Hỏi AI...")
+    q = st.chat_input("Hỏi AI chuyên gia...")
     if q:
-        st.session_state.data["chat_history"].append([q, "AI đang tổng hợp..."])
+        st.session_state.data["chat_history"].append([q, "AI đang xử lý..."])
         save_data(); st.rerun()
     for chat in reversed(st.session_state.data.get("chat_history", [])[-3:]):
         with st.chat_message("assistant"): st.write(chat[1])
@@ -213,18 +201,15 @@ with st.sidebar:
     if st.button("📍 2. GHIM CÂY MỚI (GPS)"):
         if loc:
             st.session_state.data["plants"].append({
-                "variety": "Ớt Aji Charapita", 
-                "lat": loc["coords"]["latitude"], 
-                "lon": loc["coords"]["longitude"], 
-                "date": str(date.today())
+                "variety": "Ớt Aji Charapita", "lat": loc["coords"]["latitude"], 
+                "lon": loc["coords"]["longitude"], "date": str(date.today())
             })
             save_data(); st.rerun()
     st.divider()
     if st.checkbox("Xác nhận Reset"):
-        if st.button("🗑️ Xóa sạch vườn"):
+        if st.button("🗑️ Xóa vườn"):
             st.session_state.data = {"plants": [], "disease_logs": [], "treatment_feedback": [], "chat_history": []}
             save_data(); st.rerun()
-
 
 
 
