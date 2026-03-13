@@ -1,7 +1,6 @@
 import streamlit as st
 import os
 import json
-from datetime import date
 import re
 import pandas as pd
 from datetime import datetime
@@ -673,6 +672,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
