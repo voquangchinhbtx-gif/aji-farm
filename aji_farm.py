@@ -307,90 +307,120 @@ from PIL import Image, ImageOps
 from datetime import date
 
 # =========================================================
-# 11. AI CHẨN ĐOÁN KẾT HỢP DỮ LIỆU MÔI TRƯỜNG (FINAL STABLE)
+# 11. AI CHẨN ĐOÁN KẾT HỢP DỮ LIỆU MÔI TRƯỜNG
 # =========================================================
+
 st.divider()
 st.subheader("🧠 AI Phân tích bệnh cây (Context-Aware AI)")
 
-# 1. KIỂM TRA INFO AN TOÀN (Theo góp ý số 1)
-# Ưu tiên lấy từ session_state nếu ông đã lưu ở Mục 5, nếu không thì lấy locals
+# Lấy dữ liệu môi trường an toàn
 info = st.session_state.get("weather", locals().get("info", {}))
 
+# Camera
 img_file = st.camera_input("📷 Chụp lá cây nghi ngờ")
 
-if img_file:
-    # 2. XỬ LÝ ẢNH CHỐNG CRASH (Theo góp ý số 2)
-    img = Image.open(img_file)
-    
-    # Chống xoay ngược EXIF
-    img = ImageOps.exif_transpose(img)
-    
-    # Chuyển RGBA sang RGB để tránh lỗi khi lưu JPEG
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-    
-    # Resize giữ tỉ lệ
-    img.thumbnail((1024, 1024)) 
-    
-    # Nén ảnh & Xử lý Buffer chuẩn
-    buffer = io.BytesIO()
-    img.save(buffer, format="JPEG", quality=85)
-    buffer.seek(0)
-    img_compressed = Image.open(buffer)
+# Reset kết quả khi có ảnh mới
+if img_file is not None:
+    if "last_uploaded_eye" not in st.session_state or st.session_state["last_uploaded_eye"] != img_file.name:
+        st.session_state.pop("ai_result", None)
+        st.session_state["last_uploaded_eye"] = img_file.name
 
-    env_context = f"""
-    - Vị trí: {info.get('city','Vườn')}
-    - Nhiệt độ: {info.get('temp', 25)}°C
-    - Độ ẩm: {info.get('hum', 70)}%
-    - Tốc độ gió: {info.get('wind', 0)} m/s
-    - Điều kiện: {info.get('desc','Không rõ')}
-    """
+if img_file is not None:
 
-    if "model" not in globals() and "model" not in locals():
-        st.warning("⚠️ Hệ thống AI chưa được cấu hình API Key.")
-    else:
-        with st.spinner("🔍 AI đang phân tích dữ liệu đa tầng..."):
-            try:
-                # 3. PROMPT TỐI ƯU (Theo góp ý số 3)
-                full_prompt = f"""
-                Bạn là chuyên gia bệnh học thực vật.
+    try:
+        # =============================
+        # XỬ LÝ ẢNH
+        # =============================
+        img = Image.open(img_file)
 
-                DỮ LIỆU KHÍ TƯỢNG:
-                {env_context}
+        img = ImageOps.exif_transpose(img)
 
-                Nhiệm vụ: Phân tích ảnh và dữ liệu khí tượng để chẩn đoán:
-                1. Bệnh nghi ngờ nhất.
-                2. Chỉ số tin cậy (%).
-                3. Giải thích tại sao môi trường này lại gây bệnh.
-                4. Phác đồ xử lý sinh học.
+        if img.mode != "RGB":
+            img = img.convert("RGB")
 
-                Trả lời bằng tiếng Việt, ngắn gọn, tối đa 120 từ.
-                """
+        img.thumbnail((1024,1024))
 
-                response = model.generate_content([full_prompt, img_compressed])
-                result = getattr(response, "text", "AI không trả dữ liệu.")
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        buffer.seek(0)
 
-                # HIỂN THỊ KẾT QUẢ
-                st.markdown("---")
-                col_img, col_res = st.columns([1, 1.2])
+        # =============================
+        # DỮ LIỆU MÔI TRƯỜNG
+        # =============================
+        env_context = f"""
+        Vị trí: {info.get('city','Vườn')}
+        Nhiệt độ: {info.get('temp','?')}°C
+        Độ ẩm: {info.get('hum','?')}%
+        Gió: {info.get('wind','?')} m/s
+        Điều kiện: {info.get('desc','Không rõ')}
+        """
 
-                with col_img:
-                    st.image(img, caption="Mẫu bệnh hiện tại", use_container_width=True)
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("🌡️ T", f"{info.get('temp','?')}°C")
-                    c2.metric("💧 H", f"{info.get('hum','?')}%")
-                    c3.metric("💨 W", f"{info.get('wind','?')} m/s")
+        st.markdown("---")
 
-                with col_res:
-                    st.markdown("### 🔬 Kết luận của Hệ thống")
-                    st.success(result)
+        col1, col2 = st.columns([1,1.2])
 
-                    # Lưu bền vững vào Session (Byte nén)
+        # =============================
+        # HIỂN THỊ ẢNH
+        # =============================
+        with col1:
+
+            st.image(img, caption="Ảnh vừa chụp", use_container_width=True)
+
+            c1,c2,c3 = st.columns(3)
+            c1.metric("🌡️ Nhiệt", f"{info.get('temp','?')}°C")
+            c2.metric("💧 Ẩm", f"{info.get('hum','?')}%")
+            c3.metric("💨 Gió", f"{info.get('wind','?')} m/s")
+
+        # =============================
+        # AI PHÂN TÍCH
+        # =============================
+        with col2:
+
+            st.markdown("### 🔬 Kết luận AI")
+
+            if st.button("🔍 Bắt đầu phân tích ngay", use_container_width=True):
+
+                with st.spinner("AI đang phân tích bệnh cây..."):
+
+                    prompt = f"""
+                    Bạn là chuyên gia bệnh học thực vật.
+                    Tập trung vào các đốm biến màu, rìa lá cháy,
+                    hoặc lớp phấn bám trên bề mặt lá trong ảnh.
+
+                    DỮ LIỆU KHÍ HẬU THỰC TẾ:
+                    {env_context}
+
+                    Hãy cho biết:
+
+                    1. Bệnh nghi ngờ nhất
+                    2. Độ tin cậy (%)
+                    3. Vì sao môi trường này gây bệnh
+                    4. Cách xử lý sinh học
+
+                    Trả lời tiếng Việt dưới 120 từ.
+                    """
+
+                    response = model.generate_content(
+                        [
+                            prompt,
+                            {"mime_type":"image/jpeg","data":buffer.getvalue()}
+                        ]
+                    )
+
+                    result = getattr(response,"text","AI không trả dữ liệu.")
+
                     st.session_state["ai_result"] = result
-                    st.session_state["ai_image"] = buffer.getvalue() 
 
-            except Exception as e:
-                st.error(f"❌ Lỗi xử lý AI: {e}")
+            # =============================
+            # HIỂN THỊ KẾT QUẢ BỀN VỮNG
+            # =============================
+            if "ai_result" in st.session_state:
+                st.success(st.session_state["ai_result"])
+            else:
+                st.info("Nhấn nút phía trên để AI phân tích hình ảnh và dữ liệu môi trường.")
+
+    except Exception as e:
+        st.error(f"❌ Lỗi xử lý ảnh: {e}")
 
 # =========================================================
 # 12. NHẬT KÝ VÀ SẮP XẾP DỮ LIỆU (SMART LOGGING)
@@ -545,6 +575,7 @@ if "current_procedure" in st.session_state:
             
             # Rerun để làm sạch giao diện
             st.rerun()
+
 
 
 
