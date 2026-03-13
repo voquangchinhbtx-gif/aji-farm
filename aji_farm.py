@@ -10,8 +10,10 @@ from PIL import Image, ImageOps
 import io
 
 # =========================================================
-# 0. KHỞI TẠO SESSION STATE & LOAD DATA
+# 0. KHỞI TẠO DỮ LIỆU & CẤU HÌNH GIAO DIỆN
 # =========================================================
+st.set_page_config(page_title="Aji Farm Pro AI", layout="wide", page_icon="🌶️")
+
 DATA_FILE = "farm_data.json"
 
 @st.cache_data
@@ -24,478 +26,222 @@ def load_data():
             return {"plants": [], "disease_logs": [], "treatment_feedback": []}
     return {"plants": [], "disease_logs": [], "treatment_feedback": []}
 
-# Khởi tạo các biến session_state cần thiết
-if "data" not in st.session_state:
-    st.session_state.data = load_data()
-
-if "weather" not in st.session_state:
-    st.session_state["weather"] = {"city": "Vườn Aji", "temp": 25, "hum": 80, "wind": 0, "desc": "Đang lấy dữ liệu..."}
-
-if "ai_result" not in st.session_state:
-    st.session_state["ai_result"] = None
-
-if "last_uploaded_eye" not in st.session_state:
-    st.session_state["last_uploaded_eye"] = None
-
-if "ai_loading" not in st.session_state:
-    st.session_state["ai_loading"] = False
-
-# ================================
-# LẤY API KEY TỪ STREAMLIT SECRETS
-# ================================
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
-
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-else:
-    st.warning("⚠️ Chưa tìm thấy GEMINI_API_KEY trong Secrets.")
-    model = None
-
-# =============================
-# 1. CẤU HÌNH
-# =============================
-try:
-    st.set_page_config(page_title="Aji Farm", layout="wide", page_icon="🌶️")
-except:
-    pass
-
-WEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
-
-# =============================
-# 2. SAVE DATA (1️⃣ TỐI ƯU CACHE CHỈ ĐỊNH)
-# =============================
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.data, f, ensure_ascii=False, indent=2)
-    # Chỉ xóa cache của hàm load_data, giữ lại cache thời tiết
     load_data.clear()
 
-# =============================
-# 3. WEATHER FUNCTION
-# =============================
+if "data" not in st.session_state:
+    st.session_state.data = load_data()
+
+# Khởi tạo bộ nhớ tạm cho UI
+for key in ["weather", "current_procedure", "cur_p_ai", "gps"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
+# =========================================================
+# 1. CẤU HÌNH AI & GPS & WEATHER
+# =========================================================
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
+if GEMINI_KEY:
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+        model = genai.GenerativeModel("models/gemini-1.5-flash")
+    except:
+        model = None
+else:
+    model = None
+
+WEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
+
 @st.cache_data(ttl=600)
 def get_weather(lat, lon):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=vi"
         r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            return r.json()
-        return None
-    except:
-        return None
+        return r.json() if r.status_code == 200 else None
+    except: return None
 
-# =============================
-# 4 & 5. GPS & WEATHER DATA
-# =============================
-loc = st.session_state.get("location", None)
-if loc is None:
-    loc_input = get_geolocation()
-    if loc_input:
-        st.session_state.location = loc_input
-        loc = loc_input
+# Tối ưu lấy GPS (Chỉ gọi 1 lần)
+if not st.session_state.gps:
+    st.session_state.gps = get_geolocation()
 
+loc = st.session_state.gps
 if loc and "coords" in loc:
-    lat, lon = loc["coords"]["latitude"], loc["coords"]["longitude"]
-    w = get_weather(lat, lon)
-    if w and w.get("cod") == 200:
+    w = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
+    if w:
         st.session_state["weather"] = {
-            "city": w.get("name", "Vườn"),
-            "temp": w["main"]["temp"],
-            "hum": w["main"]["humidity"],
-            "wind": w.get("wind", {}).get("speed", 0),
+            "city": w.get("name", "Vườn"), "temp": w["main"]["temp"],
+            "hum": w["main"]["humidity"], "wind": w.get("wind", {}).get("speed", 0),
             "desc": w["weather"][0]["description"].capitalize()
         }
 
-info = st.session_state["weather"]
-
-# =============================
-# 6. UI CHÍNH
-# =============================
-st.title("🌶️ Aji Farm Management")
-st.subheader(f"📍 {info['city']}")
-
-c1, c2, c3 = st.columns(3)
-c1.metric("🌡 Nhiệt độ", f"{info['temp']} °C")
-c2.metric("💧 Độ ẩm", f"{info['hum']} %")
-c3.metric("💨 Gió", f"{info['wind']} m/s")
-st.info(info["desc"])
-st.divider()
-
-# =============================
-# 7. THÊM CÂY
-# =============================
-st.subheader("🌱 Thêm cây trồng")
-with st.form("add_plant"):
-    col1, col2 = st.columns(2)
-    with col1:
-        plant_type = st.selectbox("Nhóm cây", ["Rau","Gia vị","Cây dây leo","Cây thân bụi","Cây thân gỗ","Cây ăn trái","Cây cảnh"])
-        species = st.text_input("Loài cây")
-        variety = st.text_input("Giống")
-    with col2:
-        loc_input_box = st.text_input("Khu trồng")
-        p_date = st.date_input("Ngày trồng", date.today())
-        age_input = st.number_input("Tuổi cây (năm)", 0, 100, 0)
-    
-    if st.form_submit_button("➕ Thêm cây"):
-        plant = {"type": plant_type, "species": species, "variety": variety, "location": loc_input_box, "plant_date": str(p_date), "age_years": age_input}
-        st.session_state.data["plants"].append(plant)
-        save_data()
-        st.success("Đã thêm cây")
-        st.rerun()
+info = st.session_state.get("weather", {"city": "Chưa xác định", "temp": 25, "hum": 80, "wind": 1, "desc": "N/A"})
 
 # =========================================================
-# 8 & 9. QUẢN LÝ DANH SÁCH (CRUD + SEARCH + ANALYTICS)
+# 2. DASHBOARD CHÍNH
 # =========================================================
+st.title("🌶️ Aji Farm Management Pro")
 plants = st.session_state.data.get("plants", [])
 
-# 1️⃣ Dashboard Tổng quát trên đầu
-c_top1, c_top2 = st.columns([2, 1])
-with c_top1:
-    st.subheader("🌿 Quản lý Vườn")
-with c_top2:
-    st.metric("Tổng số cây", len(plants))
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("📍 Vị trí", info['city'])
+c2.metric("🌡 Nhiệt độ", f"{info['temp']}°C")
+c3.metric("💧 Độ ẩm", f"{info['hum']}%")
+c4.metric("🌿 Tổng số cây", len(plants))
+st.info(f"Dự báo thời tiết: {info['desc']}")
+
+# =========================================================
+# 3. QUẢN LÝ CÂY TRỒNG (CRUD + SEARCH)
+# =========================================================
+st.divider()
+st.subheader("📋 Danh sách vườn")
+
+df_p = pd.DataFrame(plants)
+
+# Kiểm tra an toàn trước khi Search
+if not df_p.empty and "variety" in df_p.columns:
+    search = st.text_input("🔎 Tìm cây nhanh...", placeholder="Nhập giống cây cần tìm...")
+    df_display = df_p[df_p["variety"].str.contains(search, case=False, na=False)] if search else df_p
+    st.dataframe(df_display, use_container_width=True)
+else:
+    st.info("🌵 Vườn chưa có cây nào. Hãy thêm cây ở mục bên dưới.")
+
+with st.expander("🛠 Thao tác quản lý Cây (Thêm/Sửa/Xóa)"):
+    tab1, tab2, tab3 = st.tabs(["➕ Thêm mới", "✏️ Chỉnh sửa", "🗑️ Xóa cây"])
+    
+    with tab1:
+        with st.form("add_plant"):
+            t = st.selectbox("Phân loại", ["Gia vị", "Rau", "Ăn trái", "Cảnh"])
+            v = st.text_input("Giống cây (Variety)")
+            l = st.text_input("Vị trí trồng (Location)")
+            a = st.number_input("Tuổi cây (năm)", 0, 100, 0)
+            if st.form_submit_button("Lưu vào vườn"):
+                st.session_state.data["plants"].append({"type": t, "variety": v, "location": l, "age_years": a})
+                save_data(); st.rerun()
+
+    if plants:
+        p_list_str = [f"{i} | {p.get('variety','Cây')} | {p.get('location','Vườn')}" for i, p in enumerate(plants)]
+        
+        with tab2:
+            target_e = st.selectbox("Chọn cây muốn sửa:", p_list_str, key="edit_sel")
+            idx_e = int(target_e.split(" | ")[0])
+            p_curr = plants[idx_e]
+            
+            with st.form("edit_form_full"):
+                type_opts = ["Gia vị", "Rau", "Ăn trái", "Cảnh"]
+                curr_t = p_curr.get("type", "Rau")
+                if curr_t not in type_opts: curr_t = "Rau"
+                
+                new_t = st.selectbox("Sửa loại", type_opts, index=type_opts.index(curr_t))
+                new_v = st.text_input("Sửa giống", p_curr.get('variety'))
+                new_l = st.text_input("Sửa vị trí", p_curr.get('location'))
+                new_a = st.number_input("Sửa tuổi", 0, 100, int(p_curr.get('age_years', 0)))
+                
+                if st.form_submit_button("💾 Cập nhật thay đổi"):
+                    st.session_state.data["plants"][idx_e] = {"type": new_t, "variety": new_v, "location": new_l, "age_years": new_a}
+                    save_data(); st.success("Đã cập nhật!"); st.rerun()
+
+        with tab3:
+            target_d = st.selectbox("Chọn cây muốn xóa:", p_list_str, key="del_sel")
+            confirm_del = st.checkbox("Tôi chắc chắn muốn xóa cây này")
+            if st.button("❌ Xác nhận Xóa", type="primary", disabled=not confirm_del):
+                st.session_state.data["plants"].pop(int(target_d.split(" | ")[0]))
+                save_data(); st.rerun()
+
+# =========================================================
+# 4. HỆ THỐNG DỰ BÁO DỊCH TỄ (SMART FORECAST)
+# =========================================================
+st.divider()
+st.subheader("🔮 Dự báo Dịch tễ (IPPC Model)")
+def clamp(x): return max(0.0, min(float(x), 1.0))
 
 if plants:
-    df_p = pd.DataFrame(plants)
+    p_names = [f"{p['variety']} ({p['location']})" for p in plants]
+    sel_p_f = st.selectbox("Dự báo nguy cơ cho cây:", p_names)
     
-    # 3️⃣ Chuẩn hóa hiển thị tuổi cây
-    if "age_years" in df_p.columns:
-        df_p["age_years"] = df_p["age_years"].fillna(0).astype(int)
-        df_p = df_p.rename(columns={"age_years": "Tuổi (năm)"})
-
-    # 1️⃣ Tìm cây nhanh (Search Engine)
-    search = st.text_input("🔎 Tìm kiếm cây (theo giống hoặc tên)", placeholder="Ví dụ: Ớt, Cà chua...")
-    
-    if search:
-        # Tìm kiếm không phân biệt hoa thường trong cột 'variety'
-        df_display = df_p[df_p["variety"].str.contains(search, case=False, na=False)]
-    else:
-        df_display = df_p
-
-    st.dataframe(df_display, use_container_width=True)
-
-    # --- KHU VỰC QUẢN LÝ (SỬA & XÓA) ---
-    st.divider()
-    col_manage1, col_manage2 = st.columns(2)
-
-    with col_manage1:
-        st.write("### ✏️ Chỉnh sửa thông tin")
-        plant_to_edit_str = st.selectbox(
-            "Chọn cây cần sửa:",
-            [f"{i} | {p.get('variety','Cây')} | {p.get('location','Vườn')}" for i, p in enumerate(plants)],
-            key="edit_select"
-        )
-        edit_idx = int(plant_to_edit_str.split(" | ")[0])
-        p_edit = plants[edit_idx]
-
-        with st.expander("Mở Form chỉnh sửa"):
-            with st.form("edit_form"):
-                new_variety = st.text_input("Giống cây", p_edit.get('variety'))
-                new_loc = st.text_input("Vị trí", p_edit.get('location'))
-                new_age = st.number_input("Tuổi (năm)", 0, 100, int(p_edit.get('age_years', 0)))
-                
-                if st.form_submit_button("💾 Lưu thay đổi"):
-                    st.session_state.data["plants"][edit_idx].update({
-                        "variety": new_variety,
-                        "location": new_loc,
-                        "age_years": new_age
-                    })
-                    save_data()
-                    st.success("Đã cập nhật!")
-                    st.rerun()
-
-    with col_manage2:
-        st.write("### 🗑️ Xóa cây")
-        plant_to_del_str = st.selectbox(
-            "Chọn cây muốn xóa:",
-            [f"{i} | {p.get('variety','Cây')} | {p.get('location','Vườn')}" for i, p in enumerate(plants)],
-            key="del_select"
-        )
-        del_idx = int(plant_to_del_str.split(" | ")[0])
-        
-        confirm_del = st.checkbox("Tôi chắc chắn muốn xóa cây này", key="confirm_del")
-        if st.button("❌ Xác nhận Xóa", type="primary", disabled=not confirm_del):
-            removed = st.session_state.data["plants"].pop(del_idx)
-            save_data()
-            st.toast(f"Đã xóa {removed.get('variety')}!")
-            st.rerun()
-
-    # 2️⃣ Thống kê đẹp hơn
-    st.divider()
-    st.write("### 📊 Thống kê phân bổ")
-    c_chart1, c_chart2 = st.columns(2)
-    with c_chart1:
-        st.write("**Số lượng theo loại cây**")
-        st.bar_chart(df_p["type"].value_counts())
-    with c_chart2:
-        st.write("**Số lượng theo vị trí (Vườn)**")
-        st.bar_chart(df_p["location"].value_counts())
-else:
-    st.info("Chưa có cây nào trong vườn")
-
-# =========================================================
-# 10. HỆ THỐNG DỰ BÁO DỊCH TỄ HỌC (BẢN DASHBOARD THÔNG MINH)
-# =========================================================
-
-# 1️⃣ Hàm Cache kết quả AI (Tiết kiệm API, giữ kết quả trong 10 phút)
-@st.cache_data(ttl=600)
-def get_ai_prevention_advice(advice_prompt):
-    if model:
-        try:
-            res = model.generate_content(advice_prompt)
-            return getattr(res, "text", "AI hiện chưa có đề xuất.")
-        except:
-            return "Không thể kết nối AI lúc này."
-    return "Chưa cấu hình API Key."
-
-st.divider()
-st.subheader("🔮 Hệ thống Dự báo Dịch tễ học")
-
-def clamp(x):
-    return max(0.0, min(float(x), 1.0))
-
-if not plants:
-    st.info("Hãy thêm cây để AI dự báo nguy cơ dịch bệnh chính xác hơn cho từng loài.")
-else:
-    plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
-    selected_p_forecast = st.selectbox("Chọn cây để dự báo:", plant_names, key="forecast_select")
-    
-    plant_data = next((p for p in plants if f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" == selected_p_forecast), {})
-    plant_type_focus = plant_data.get('type', 'Rau')
-
     T, H, W = info["temp"], info["hum"], info["wind"]
-
-    # --- TÍNH TOÁN NGUY CƠ ---
     risks = {
-        "Thán thư": clamp((H / 100) * (1.3 if 24 <= T <= 32 else 0.5) * (1.2 if plant_type_focus in ["Gia vị", "Cây ăn trái"] else 1.0)),
-        "Phấn trắng": clamp(((100 - H) / 100) * (1.2 if 18 <= T <= 26 else 0.4) * (1.3 if plant_type_focus in ["Cây dây leo", "Cây cảnh"] else 1.0)),
-        "Sương mai": clamp((H / 100) * (1.5 if H > 85 and T < 24 else 0.3) * (0.8 if W > 4 else 1.2)),
-        "Vi khuẩn": clamp((H / 100) * (1.4 if T > 26 else 0.6)),
-        "Thối rễ": clamp((H / 100) * (1.3 if W < 3 else 0.7))
+        "Thán thư": clamp((H/100) * (1.3 if 24<=T<=32 else 0.5)),
+        "Phấn trắng": clamp(((100-H)/100) * (1.2 if 18<=T<=26 else 0.4)),
+        "Sương mai": clamp((H/100) * (1.5 if H>85 and T<24 else 0.3) * (0.8 if W>4 else 1.2)),
+        "Vi khuẩn": clamp((H/100) * (1.4 if T>26 else 0.6)),
+        "Thối rễ": clamp((H/100) * (1.3 if W<3 else 0.7))
     }
     
-    top_disease = max(risks, key=risks.get)
-    max_risk = risks[top_disease]
-
-    # 3️⃣ Hiển thị bệnh nguy hiểm nổi bật bằng Metric
-    m1, m2 = st.columns([2, 1])
-    with m1:
-        st.metric(
-            label="⚠️ Bệnh có nguy cơ cao nhất",
-            value=top_disease,
-            delta=f"{int(max_risk*100)}% Nguy hiểm",
-            delta_color="inverse"
-        )
+    top_d = max(risks, key=risks.get)
+    st.metric("⚠️ Nguy cơ cao nhất", top_d, f"{int(risks[top_d]*100)}%", delta_color="inverse")
     
-    # 2️⃣ AI đề xuất xử lý (Dùng hàm Cache đã tạo)
-    if max_risk > 0.5:
-        with st.expander("💡 AI Đề xuất cách phòng ngừa khẩn cấp"):
-            advice_prompt = f"""
-            Thời tiết: {T}°C, ẩm {H}%, gió {W}m/s. Bệnh nguy cơ nhất: {top_disease} ({int(max_risk*100)}%).
-            Đề xuất 3 hành động phòng ngừa khẩn cấp cho {selected_p_forecast}.
-            Ngắn gọn, gạch đầu dòng, tiếng Việt, < 80 từ.
-            """
-            st.markdown(get_ai_prevention_advice(advice_prompt))
-
-    st.write("---")
-    
-    # 2️⃣ Hiển thị chi tiết với Màu cảnh báo theo %
-    r1, r2, r3 = st.columns(3)
-    r4, r5, r6 = st.columns(3)
-    cols = [r1, r2, r3, r4, r5, r6]
-    
-    items = list(risks.items())
-    avg_risk = sum(risks.values())/5
-    items.append(("Chỉ số chung", avg_risk))
-
-    for col, (label, val) in zip(cols, items):
-        with col:
-            st.write(f"**{label}**")
+    cols = st.columns(5)
+    for i, (name, val) in enumerate(risks.items()):
+        with cols[i]:
+            st.write(f"**{name}**")
             st.progress(val)
-            # Thêm cảnh báo màu sắc theo %
-            if val > 0.7:
-                st.error(f"🔴 Nguy cơ: {int(val*100)}%")
-            elif val > 0.4:
-                st.warning(f"🟡 Cần theo dõi: {int(val*100)}%")
-            else:
-                st.success(f"🟢 An toàn: {int(val*100)}%")
-
-    st.info(f"💡 Dự báo dựa trên tình trạng nhóm **{plant_type_focus}** tại {info['city']}.")
+            if val > 0.7: st.error(f"{int(val*100)}%")
+            elif val > 0.4: st.warning(f"{int(val*100)}%")
+            else: st.success(f"{int(val*100)}%")
 
 # =========================================================
-# 11. AI CHẨN ĐOÁN (2️⃣ CHỐNG SPAM & 3️⃣ TỐI ƯU KÍCH THƯỚC ẢNH)
+# 5. AI QUY TRÌNH CHĂM SÓC & FEEDBACK
 # =========================================================
 st.divider()
-st.subheader("🧠 AI Phân tích bệnh cây (Context-Aware AI)")
-st.caption("📷 Chụp sát vùng lá bị bệnh để AI phân tích chính xác hơn.")
-img_file = st.camera_input("Chụp ảnh lá cây")
+st.subheader("🧬 AI Lập Quy trình & Học kinh nghiệm")
 
-if img_file is not None:
-    img_id = img_file.getvalue()[:20]
-    if st.session_state.get("last_uploaded_eye") != img_id:
-        st.session_state.pop("ai_result", None)
-        st.session_state["last_uploaded_eye"] = img_id
-
-    try:
-        img = ImageOps.exif_transpose(Image.open(img_file)).convert("RGB")
-        # 3️⃣ Resize 768px để nhanh hơn
-        img.thumbnail((768, 768))
-        
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        buf.seek(0)
-        
-        col1, col2 = st.columns([1, 1.2])
-        with col1:
-            st.image(img, caption="Ảnh vừa chụp", use_container_width=True)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("🌡️ Nhiệt", f"{info['temp']}°C")
-            c2.metric("💧 Ẩm", f"{info['hum']}%")
-            c3.metric("💨 Gió", f"{info['wind']} m/s")
-
-        with col2:
-            st.markdown("### 🔬 Kết luận AI")
-            
-            # 2️⃣ Disable nút khi đang load
-            is_loading = st.session_state.get("ai_loading", False)
-            if st.button("🔍 Bắt đầu phân tích ngay", use_container_width=True, disabled=is_loading):
-                if model:
-                    st.session_state["ai_loading"] = True
-                    with st.spinner("AI đang soi bệnh..."):
-                        prompt = f"""Bạn là chuyên gia bệnh học thực vật. Tập trung: đốm nâu, rìa lá cháy, phấn trắng, vết thối, biến màu.
-                        DỮ LIỆU KHÍ HẬU: {info}
-                        Trả lời: 1. Bệnh nghi ngờ nhất | 2. Độ tin cậy (%) | 3. Nguyên nhân môi trường | 4. Cách xử lý sinh học.
-                        Tiếng Việt, dưới 120 từ."""
-                        
-                        image_bytes = buf.getvalue()
-                        try:
-                            response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_bytes}])
-                            if hasattr(response, "text"):
-                                st.session_state["ai_result"] = response.text
-                            else:
-                                st.session_state["ai_result"] = "AI chưa trả kết quả. Hãy thử chụp lại."
-                        except Exception:
-                            st.error("❌ Lỗi kết nối AI.")
-                        finally:
-                            st.session_state["ai_loading"] = False
-                            st.rerun() # Rerun để cập nhật trạng thái disabled của nút
-                else: st.error("⚠️ Chưa cấu hình API Key.")
-
-            if st.session_state.get("ai_result"):
-                st.success(st.session_state["ai_result"])
-                st.caption("⚠️ Kết quả chỉ mang tính tham khảo.")
-    except Exception as e:
-        st.error(f"❌ Lỗi: {e}")
-
-# =========================================================
-# 12. NHẬT KÝ
-# =========================================================
-st.divider()
-st.subheader("📝 Nhật ký ghi nhận bệnh")
-
-if not plants:
-    st.warning("Chưa có cây trong vườn để ghi nhật ký.")
-else:
-    plant_names = [
-        f"{p.get('variety','Cây')} ({p.get('location','Vườn')})"
-        for p in plants
-    ]
-    selected_p = st.selectbox("Chọn cây đang kiểm tra", ["Chưa xác định"] + plant_names)
-
-    if st.button("💾 Lưu chẩn đoán vào Nhật ký"):
-        if st.session_state.get("ai_result"):
-            log = {"date": str(date.today()), "plant": selected_p, "diagnosis": st.session_state["ai_result"]}
-            if "disease_logs" not in st.session_state.data: st.session_state.data["disease_logs"] = []
-            st.session_state.data["disease_logs"].append(log)
-            save_data()
-            st.toast("Đã ghi nhật ký!", icon="✅")
-        else: st.warning("Vui lòng phân tích ảnh trước!")
-
-if st.checkbox("📖 Xem lịch sử"):
-    logs = st.session_state.data.get("disease_logs", [])
-    if logs:
-        df_l = pd.DataFrame(logs)
-        df_l["date"] = pd.to_datetime(df_l["date"])
-        st.dataframe(df_l.sort_values("date", ascending=False), use_container_width=True)
-
-# =========================================================
-# 13 & 14. AI HỌC LỆNH & ĐỀ XUẤT QUY TRÌNH (BẢN FIX LỖI)
-# =========================================================
-st.divider()
-st.subheader("🧬 AI Học & Đề xuất Quy trình")
-
-if not plants:
-    st.info("Thêm cây vào vườn để AI có thể lập quy trình chăm sóc.")
-else:
-    plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
-    target_plant = st.selectbox("Chọn cây cần lập quy trình:", plant_names, key="proc_select")
+if plants:
+    target_ai = st.selectbox("Cây cần hỗ trợ:", p_names, key="ai_p_select")
     
-    # Nút bấm kích hoạt AI
-    if st.button("🚀 AI Tạo Quy trình chuẩn", use_container_width=True):
-        if model:
-            with st.spinner("AI đang tổng hợp dữ liệu và kinh nghiệm..."):
-                try:
-                    # Lấy 5 kinh nghiệm cũ của đúng loại cây này
-                    history = [
-                        h for h in st.session_state.data.get("treatment_feedback", [])
-                        if target_plant in h["plant"]
-                    ][-5:]
-                    
-                    history_text = "\n".join(
-                        [f"- {h['date']}: {h['score']} ({h['user_note']})" for h in history]
-                    ) if history else "Chưa có kinh nghiệm cũ."
+    @st.cache_data(ttl=600)
+    def get_ai_advice(p_name, w_info, history_text):
+        if not model: return "Chưa cấu hình Gemini API Key."
+        prompt = f"Cây: {p_name}. Thời tiết: {w_info}. Kinh nghiệm cũ: {history_text}. Lập quy trình chăm sóc 7 ngày, ngắn gọn <120 từ, gạch đầu dòng."
+        return model.generate_content(prompt).text
 
-                    prompt_proc = f"""
-                    Bạn là chuyên gia nông nghiệp.
-                    KINH NGHIỆM RIÊNG VỚI {target_plant}: {history_text[:500]}
-                    THỜI TIẾT: {info['temp']}°C, ẩm {info['hum']}%, {info['desc']}
+    if st.button("🚀 AI Tạo Quy trình chuẩn"):
+        history = [h for h in st.session_state.data.get("treatment_feedback", []) if target_ai in h["plant"]][-5:]
+        h_text = "\n".join([f"- {h['score']}: {h['user_note']}" for h in history])
+        st.session_state["current_procedure"] = get_ai_advice(target_ai, str(info), h_text)
+        st.session_state["cur_p_ai"] = target_ai
 
-                    NHIỆM VỤ: Lập quy trình chăm sóc 7 ngày tới (tưới nước, bón phân, phòng bệnh).
-                    YÊU CẦU: Gạch đầu dòng, tiếng Việt, dưới 120 từ.
-                    """
-                    
-                    # Gọi AI và lưu trực tiếp vào session_state
-                    res = model.generate_content(prompt_proc)
-                    if hasattr(res, "text"):
-                        st.session_state["current_procedure"] = res.text
-                        st.session_state["current_plant_name"] = target_plant
-                    else:
-                        st.error("AI không trả về văn bản.")
-                except Exception as e:
-                    st.error(f"Lỗi gọi AI: {e}")
-        else:
-            st.error("Chưa có API Key.")
-
-    # Hiển thị kết quả (Kiểm tra xem quy trình có khớp với cây đang chọn không)
-    if "current_procedure" in st.session_state and st.session_state.get("current_plant_name") == target_plant:
-        st.markdown("---")
-        st.markdown(f"### 📋 Quy trình đề xuất cho {target_plant}")
+    if st.session_state.get("current_procedure") and st.session_state.get("cur_p_ai") == target_ai:
         st.markdown(st.session_state["current_procedure"])
-        
-        # Phần Đánh giá/Feedback
-        with st.expander("⭐ Đánh giá hiệu quả (Để AI học kinh nghiệm)"):
-            with st.form("feedback_form_final"):
-                score = st.select_slider("Mức độ hiệu quả:", options=["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
-                note = st.text_area("Ghi chú thực tế:")
-                if st.form_submit_button("💾 Lưu kinh nghiệm"):
-                    new_fb = {
-                        "date": str(date.today()), 
-                        "plant": st.session_state["current_plant_name"], 
-                        "score": score, 
-                        "user_note": note
-                    }
-                    if "treatment_feedback" not in st.session_state.data: 
-                        st.session_state.data["treatment_feedback"] = []
-                    
-                    st.session_state.data["treatment_feedback"].append(new_fb)
-                    save_data()
-                    st.success("Đã ghi nhớ kinh nghiệm!")
-                    # Xóa quy trình cũ để sẵn sàng cho lần sau
-                    del st.session_state["current_procedure"]
-                    st.rerun()
+        with st.expander("⭐ Đánh giá & Lưu kinh nghiệm cho AI"):
+            with st.form("feedback_ai"):
+                sc = st.select_slider("Kết quả thực tế", ["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
+                note = st.text_area("Ghi chú thực tế (để AI học)")
+                if st.form_submit_button("Lưu vào bộ não AI"):
+                    st.session_state.data["treatment_feedback"].append({
+                        "date": str(date.today()), "plant": target_ai, "score": sc, "user_note": note
+                    })
+                    save_data(); st.success("AI đã ghi nhớ!"); st.rerun()
 
-# Xem lịch sử
+# =========================================================
+# 6. AI VISION - CHẨN ĐOÁN BỆNH QUA ẢNH
+# =========================================================
+st.divider()
+st.subheader("🧠 AI Vision - Soi lá bệnh")
+img_f = st.camera_input("Chụp lá cây nghi ngờ bị bệnh")
+
+if img_f:
+    img = ImageOps.exif_transpose(Image.open(img_f)).convert("RGB")
+    img.thumbnail((768, 768))
+    st.image(img, caption="Ảnh chẩn đoán")
+
+    if st.button("🔍 Phân tích bằng Gemini Flash"):
+        if not model:
+            st.error("Chưa có API Key!")
+        else:
+            with st.spinner("AI đang soi bệnh..."):
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=85)
+                try:
+                    res = model.generate_content([
+                        "Bạn là bác sĩ thực vật. Chẩn đoán bệnh trên lá này, nêu nguyên nhân và cách trị. Dưới 120 từ, gạch đầu dòng.",
+                        {"mime_type": "image/jpeg", "data": buf.getvalue()}
+                    ])
+                    st.success(res.text)
+                except Exception as e: st.error(f"Lỗi: {e}")
+
+# Hiển thị nhật ký AI học
 if st.checkbox("📚 Xem nhật ký kinh nghiệm AI đã học"):
     fbs = st.session_state.data.get("treatment_feedback", [])
     if fbs:
