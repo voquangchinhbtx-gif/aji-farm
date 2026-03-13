@@ -5,6 +5,19 @@ import json
 import pandas as pd
 from datetime import date
 from streamlit_js_eval import get_geolocation
+import google.generativeai as genai
+
+# ================================
+# LẤY API KEY TỪ STREAMLIT SECRETS
+# ================================
+API_KEY = st.secrets.get("GEMINI_API_KEY")
+
+if API_KEY:
+    genai.configure(api_key=API_KEY)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+else:
+    st.warning("⚠️ Chưa tìm thấy GEMINI_API_KEY trong Secrets.")
+    model = None
 
 # =============================
 # 1. CẤU HÌNH
@@ -530,6 +543,7 @@ if "current_procedure" in st.session_state:
             
             # Rerun để làm sạch giao diện
             st.rerun()
+
 
 
 
