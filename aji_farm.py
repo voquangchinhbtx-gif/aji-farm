@@ -6,6 +6,8 @@ import pandas as pd
 from datetime import date
 from streamlit_js_eval import get_geolocation
 import google.generativeai as genai
+from PIL import Image, ImageOps
+import io
 
 # ================================
 # LẤY API KEY TỪ STREAMLIT SECRETS
@@ -543,6 +545,7 @@ if "current_procedure" in st.session_state:
             
             # Rerun để làm sạch giao diện
             st.rerun()
+
 
 
 
