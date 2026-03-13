@@ -158,28 +158,93 @@ else:
     st.info("Chưa có cây nào trong vườn")
 
 # =========================================================
-# 10. DỰ BÁO DỊCH TỄ
+# 10. HỆ THỐNG DỰ BÁO DỊCH TỄ HỌC (BẢN DASHBOARD THÔNG MINH)
 # =========================================================
+
+# 1️⃣ Hàm Cache kết quả AI (Tiết kiệm API, giữ kết quả trong 10 phút)
+@st.cache_data(ttl=600)
+def get_ai_prevention_advice(advice_prompt):
+    if model:
+        try:
+            res = model.generate_content(advice_prompt)
+            return getattr(res, "text", "AI hiện chưa có đề xuất.")
+        except:
+            return "Không thể kết nối AI lúc này."
+    return "Chưa cấu hình API Key."
+
 st.divider()
 st.subheader("🔮 Hệ thống Dự báo Dịch tễ học")
-T, H, W = info["temp"], info["hum"], info["wind"]
-anthracnose_ri = min((H / 100) * (1.2 if 22 <= T <= 28 else 0.6), 1.0)
-powdery_ri = min(((100 - H) / 100) * (1.1 if 15 <= T <= 25 else 0.4) * (1.2 if W > 3 else 1.0), 1.0)
 
-col_a, col_b = st.columns(2)
-with col_a:
-    st.write("🛡 **Chỉ số Thán thư**")
-    st.progress(anthracnose_ri)
-    if anthracnose_ri > 0.7: st.error("🚨 NGUY CƠ CAO")
-    elif anthracnose_ri > 0.4: st.warning("⚠️ CẢNH BÁO")
-    else: st.success("✅ AN TOÀN")
+def clamp(x):
+    return max(0.0, min(float(x), 1.0))
 
-with col_b:
-    st.write("🛡 **Chỉ số Phấn trắng**")
-    st.progress(powdery_ri)
-    if powdery_ri > 0.7: st.error("🚨 NGUY CƠ CAO")
-    elif powdery_ri > 0.4: st.warning("⚠️ CÓ ĐIỀU KIỆN PHÁT SINH")
-    else: st.success("✅ AN TOÀN")
+if not plants:
+    st.info("Hãy thêm cây để AI dự báo nguy cơ dịch bệnh chính xác hơn cho từng loài.")
+else:
+    plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
+    selected_p_forecast = st.selectbox("Chọn cây để dự báo:", plant_names, key="forecast_select")
+    
+    plant_data = next((p for p in plants if f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" == selected_p_forecast), {})
+    plant_type_focus = plant_data.get('type', 'Rau')
+
+    T, H, W = info["temp"], info["hum"], info["wind"]
+
+    # --- TÍNH TOÁN NGUY CƠ ---
+    risks = {
+        "Thán thư": clamp((H / 100) * (1.3 if 24 <= T <= 32 else 0.5) * (1.2 if plant_type_focus in ["Gia vị", "Cây ăn trái"] else 1.0)),
+        "Phấn trắng": clamp(((100 - H) / 100) * (1.2 if 18 <= T <= 26 else 0.4) * (1.3 if plant_type_focus in ["Cây dây leo", "Cây cảnh"] else 1.0)),
+        "Sương mai": clamp((H / 100) * (1.5 if H > 85 and T < 24 else 0.3) * (0.8 if W > 4 else 1.2)),
+        "Vi khuẩn": clamp((H / 100) * (1.4 if T > 26 else 0.6)),
+        "Thối rễ": clamp((H / 100) * (1.3 if W < 3 else 0.7))
+    }
+    
+    top_disease = max(risks, key=risks.get)
+    max_risk = risks[top_disease]
+
+    # 3️⃣ Hiển thị bệnh nguy hiểm nổi bật bằng Metric
+    m1, m2 = st.columns([2, 1])
+    with m1:
+        st.metric(
+            label="⚠️ Bệnh có nguy cơ cao nhất",
+            value=top_disease,
+            delta=f"{int(max_risk*100)}% Nguy hiểm",
+            delta_color="inverse"
+        )
+    
+    # 2️⃣ AI đề xuất xử lý (Dùng hàm Cache đã tạo)
+    if max_risk > 0.5:
+        with st.expander("💡 AI Đề xuất cách phòng ngừa khẩn cấp"):
+            advice_prompt = f"""
+            Thời tiết: {T}°C, ẩm {H}%, gió {W}m/s. Bệnh nguy cơ nhất: {top_disease} ({int(max_risk*100)}%).
+            Đề xuất 3 hành động phòng ngừa khẩn cấp cho {selected_p_forecast}.
+            Ngắn gọn, gạch đầu dòng, tiếng Việt, < 80 từ.
+            """
+            st.markdown(get_ai_prevention_advice(advice_prompt))
+
+    st.write("---")
+    
+    # 2️⃣ Hiển thị chi tiết với Màu cảnh báo theo %
+    r1, r2, r3 = st.columns(3)
+    r4, r5, r6 = st.columns(3)
+    cols = [r1, r2, r3, r4, r5, r6]
+    
+    items = list(risks.items())
+    avg_risk = sum(risks.values())/5
+    items.append(("Chỉ số chung", avg_risk))
+
+    for col, (label, val) in zip(cols, items):
+        with col:
+            st.write(f"**{label}**")
+            st.progress(val)
+            # Thêm cảnh báo màu sắc theo %
+            if val > 0.7:
+                st.error(f"🔴 Nguy cơ: {int(val*100)}%")
+            elif val > 0.4:
+                st.warning(f"🟡 Cần theo dõi: {int(val*100)}%")
+            else:
+                st.success(f"🟢 An toàn: {int(val*100)}%")
+
+    st.info(f"💡 Dự báo dựa trên tình trạng nhóm **{plant_type_focus}** tại {info['city']}.")
 
 # =========================================================
 # 11. AI CHẨN ĐOÁN (2️⃣ CHỐNG SPAM & 3️⃣ TỐI ƯU KÍCH THƯỚC ẢNH)
@@ -373,6 +438,7 @@ if st.checkbox("📚 Xem nhật ký kinh nghiệm AI đã học"):
         st.dataframe(df_fb.sort_values("date", ascending=False), use_container_width=True)
     else:
         st.info("AI chưa có dữ liệu thực tế để học tập.")
+
 
 
 
