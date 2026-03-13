@@ -4,9 +4,9 @@ import os
 import json
 from streamlit_js_eval import get_geolocation
 
-# ==============================
-# 1. CẤU HÌNH
-# ==============================
+# =============================
+# 1. CẤU HÌNH HỆ THỐNG
+# =============================
 try:
     st.set_page_config(page_title="Aji Farm", layout="wide")
 except:
@@ -15,9 +15,7 @@ except:
 DATA_FILE = "farm_data.json"
 API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
-# ==============================
-# 2. DỮ LIỆU
-# ==============================
+# Khởi tạo dữ liệu vườn
 if "data" not in st.session_state:
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -33,206 +31,72 @@ def save_data():
 def get_weather(lat, lon):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
-        return requests.get(url, timeout=5).json()
+        return requests.get(url, timeout=10).json()
     except:
         return None
 
-# ==============================
-# 3. LOGIC & HIỂN THỊ (CHỐNG LẶP)
-# ==============================
-st.title("🌶️ Aji Charapita Farm")
+# =============================
+# 2. QUẢN LÝ TRẠNG THÁI (GPS)
+# =============================
 
-# Tạo một vùng trống duy nhất để ghi đè nội dung
-view_slot = st.empty()
+# Placeholder này là "kháng thể" chống lặp giao diện
+placeholder = st.empty()
 
-# Lấy GPS (Kích hoạt rerun ngầm)
-loc = get_geolocation()
+if "location" not in st.session_state:
+    st.session_state.location = get_geolocation()
 
-# Giá trị mặc định
-info = {"t": 25, "h": 80, "d": "Đang cập nhật...", "c": "Huế"}
+loc = st.session_state.location
+
+# =============================
+# 3. XỬ LÝ LOGIC UI
+# =============================
+
+# Dữ liệu hiển thị mặc định (trong lúc chờ GPS)
+info = {"t": 25, "h": 80, "d": "Đang lấy tọa độ từ trình duyệt...", "c": "Huế"}
 
 if loc and "coords" in loc:
-    w = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
-    if w and w.get("cod") == 200:
+    weather = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
+    if weather and weather.get("cod") == 200:
         info = {
-            "t": w["main"]["temp"],
-            "h": w["main"]["humidity"],
-            "d": w["weather"][0]["description"].capitalize(),
-            "c": w["name"]
+            "t": weather["main"]["temp"],
+            "h": weather["main"]["humidity"],
+            "d": weather["weather"][0]["description"].capitalize(),
+            "c": weather["name"]
         }
 
-# ĐẨY TẤT CẢ VÀO KHUNG DUY NHẤT
-with view_slot.container():
-    # --- THỜI TIẾT ---
+# Đẩy toàn bộ giao diện vào placeholder
+with placeholder.container():
+    st.title("🌶️ Aji Charapita Farm Management")
+    
+    # Khu vực Thời tiết
     st.subheader(f"📍 {info['c']}")
     c1, c2, c3 = st.columns(3)
     c1.metric("🌡️ Nhiệt độ", f"{info['t']}°C")
     c2.metric("💧 Độ ẩm", f"{info['h']}%")
-    c3.info(info['d'])
-    
+    st.info(f"Dự báo: {info['d']}")
+
     st.divider()
 
-    # --- QUẢN LÝ VƯỜN ---
-    st.subheader("🌿 Quản lý vườn")
-    st.write(f"Số lượng cây: **{len(st.session_state.data['plants'])}**")
-    
-    # Thêm cây mới
-    col_input, col_btn = st.columns([3, 1])
-    with col_input:
-        plant_name = st.text_input("Nhập tên cây mới", key="new_plant", label_visibility="collapsed", placeholder="Tên cây...")
+    # Khu vực Quản lý vườn
+    st.subheader("🌿 Quản lý vườn cây")
+    st.write(f"Tổng số cây hiện có: **{len(st.session_state.data['plants'])}**")
+
+    # Nhập liệu gọn gàng
+    col_in, col_btn = st.columns([4, 1])
+    with col_in:
+        new_plant = st.text_input("Tên cây mới", placeholder="Ví dụ: Cây ớt khu A...", label_visibility="collapsed")
     with col_btn:
-        if st.button("➕ Thêm"):
-            if plant_name:
-                st.session_state.data["plants"].append(plant_name)
+        if st.button("➕ Thêm", use_container_width=True):
+            if new_plant:
+                st.session_state.data["plants"].append(new_plant)
                 save_data()
                 st.rerun()
 
-    # Danh sách cây
+    # Danh sách cây trồng
     if st.session_state.data["plants"]:
-        with st.expander("📖 Xem danh sách cây chi tiết"):
-            for p in st.session_state.data["plants"]:
-                st.write(f"🌱 {p}")
-
-# ==========================================
-# 4. WEATHER HUẾ - PHIÊN BẢN CHỐNG CRASH
-# ==========================================
-import streamlit as st
-import requests
-from streamlit_js_eval import get_geolocation
-from datetime import datetime
-
-# --- CẤU HÌNH ---
-st.set_page_config(page_title="Aji Charapita Farm", layout="wide")
-API_KEY = "66ad043d6024749fa4bf92f0a6782397"
-
-
-# --- HÀM LẤY THỜI TIẾT ---
-def get_weather_data():
-
-    data = {
-        "temp": 25,
-        "humi": 80,
-        "desc": "Đang cập nhật...",
-        "city": "Vườn Kim Long",
-        "icon": "🌡️"
-    }
-
-    try:
-        loc = get_geolocation()
-
-        if loc and "coords" in loc:
-
-            lat = loc["coords"].get("latitude")
-            lon = loc["coords"].get("longitude")
-
-            if lat and lon:
-
-                url = (
-                    f"https://api.openweathermap.org/data/2.5/weather?"
-                    f"lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
-                )
-
-                res = requests.get(url, timeout=5).json()
-
-                if res.get("cod") == 200:
-
-                    data["temp"] = res["main"]["temp"]
-                    data["humi"] = res["main"]["humidity"]
-
-                    raw_desc = res["weather"][0]["description"].capitalize()
-                    data["city"] = res.get("name", "Vườn Kim Long")
-
-                    desc_l = raw_desc.lower()
-
-                    if "mưa" in desc_l:
-                        icon = "🌧️"
-                    elif "mây" in desc_l:
-                        icon = "☁️"
-                    elif "quang" in desc_l or "nắng" in desc_l:
-                        icon = "☀️"
-                    elif "dông" in desc_l:
-                        icon = "⚡"
-                    else:
-                        icon = "🌡️"
-
-                    data["icon"] = icon
-                    data["desc"] = f"{icon} {raw_desc}"
-
-                    st.sidebar.success(f"📍 Vị trí: {data['city']}")
-
-                else:
-                    st.sidebar.warning("⚠️ Không lấy được dữ liệu thời tiết.")
-
-        else:
-            st.sidebar.info("🔄 Đang chờ quyền truy cập GPS...")
-
-    except Exception:
-        st.sidebar.error("⚠️ Lỗi kết nối thời tiết")
-
-    return data
-
-
-# --- GIAO DIỆN CHÍNH ---
-st.title("🌶️ Aji Charapita Farm Management")
-
-weather = get_weather_data()
-
-st.subheader("📊 Trung tâm điều khiển")
-
-c1, c2, c3 = st.columns(3)
-
-# --- Nhiệt độ ---
-with c1:
-
-    if weather["temp"] > 32:
-        t_delta = "Nóng!"
-        delta_color = "inverse"
-    else:
-        t_delta = "Ổn định"
-        delta_color = "normal"
-
-    st.metric("Nhiệt độ", f"{weather['temp']}°C", delta=t_delta, delta_color=delta_color)
-
-
-# --- Độ ẩm ---
-with c2:
-
-    if weather["humi"] > 85:
-        h_delta = "Ẩm cao"
-    else:
-        h_delta = "Bình thường"
-
-    st.metric("Độ ẩm", f"{weather['humi']}%", delta=h_delta)
-
-
-# --- Thời tiết ---
-with c3:
-
-    st.write("**Thời tiết thực tế**")
-    st.info(weather["desc"])
-
-
-st.divider()
-
-
-# --- PHẦN AI CẢNH BÁO ---
-predictions = []   # nơi load dữ liệu AI sau này
-
-reliable_preds = [
-    p for p in predictions if p.get("confidence", 0) > 60
-] if predictions else []
-
-
-if reliable_preds:
-
-    st.success("📢 Có cảnh báo quan trọng từ AI!")
-
-    for p in reliable_preds:
-        st.write(f"🌿 {p.get('plant','Không rõ')} — {p.get('disease','Không rõ')}")
-
-else:
-
-    st.write("✅ Chưa có cảnh báo bệnh hại nào được ghi nhận.")
+        with st.expander("📖 Xem danh sách chi tiết"):
+            for i, p in enumerate(st.session_state.data["plants"]):
+                st.write(f"{i+1}. 🌱 {p}")
 
 # ==========================================
 # 5. CẢNH BÁO NÔNG NGHIỆP (Thêm kiểm tra mưa)
@@ -720,6 +584,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
