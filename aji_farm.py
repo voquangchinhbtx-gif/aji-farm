@@ -284,6 +284,145 @@ st.line_chart(seasonal_risk.set_index("Tháng"))
 st.caption(
 "ℹ️ Mô hình dự báo dựa trên sự kết hợp giữa dữ liệu thời tiết thực và mô hình dịch tễ cây trồng."
 )
+import streamlit as st
+import pandas as pd
+import io
+import google.generativeai as genai
+from PIL import Image, ImageOps
+from datetime import date
+
+# =========================================================
+# 11. AI CHẨN ĐOÁN KẾT HỢP DỮ LIỆU MÔI TRƯỜNG (FINAL STABLE)
+# =========================================================
+st.divider()
+st.subheader("🧠 AI Phân tích bệnh cây (Context-Aware AI)")
+
+# 1. KIỂM TRA INFO AN TOÀN (Theo góp ý số 1)
+# Ưu tiên lấy từ session_state nếu ông đã lưu ở Mục 5, nếu không thì lấy locals
+info = st.session_state.get("weather", locals().get("info", {}))
+
+img_file = st.camera_input("📷 Chụp lá cây nghi ngờ")
+
+if img_file:
+    # 2. XỬ LÝ ẢNH CHỐNG CRASH (Theo góp ý số 2)
+    img = Image.open(img_file)
+    
+    # Chống xoay ngược EXIF
+    img = ImageOps.exif_transpose(img)
+    
+    # Chuyển RGBA sang RGB để tránh lỗi khi lưu JPEG
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    
+    # Resize giữ tỉ lệ
+    img.thumbnail((1024, 1024)) 
+    
+    # Nén ảnh & Xử lý Buffer chuẩn
+    buffer = io.BytesIO()
+    img.save(buffer, format="JPEG", quality=85)
+    buffer.seek(0)
+    img_compressed = Image.open(buffer)
+
+    env_context = f"""
+    - Vị trí: {info.get('city','Vườn')}
+    - Nhiệt độ: {info.get('temp', 25)}°C
+    - Độ ẩm: {info.get('hum', 70)}%
+    - Tốc độ gió: {info.get('wind', 0)} m/s
+    - Điều kiện: {info.get('desc','Không rõ')}
+    """
+
+    if "model" not in globals() and "model" not in locals():
+        st.warning("⚠️ Hệ thống AI chưa được cấu hình API Key.")
+    else:
+        with st.spinner("🔍 AI đang phân tích dữ liệu đa tầng..."):
+            try:
+                # 3. PROMPT TỐI ƯU (Theo góp ý số 3)
+                full_prompt = f"""
+                Bạn là chuyên gia bệnh học thực vật.
+
+                DỮ LIỆU KHÍ TƯỢNG:
+                {env_context}
+
+                Nhiệm vụ: Phân tích ảnh và dữ liệu khí tượng để chẩn đoán:
+                1. Bệnh nghi ngờ nhất.
+                2. Chỉ số tin cậy (%).
+                3. Giải thích tại sao môi trường này lại gây bệnh.
+                4. Phác đồ xử lý sinh học.
+
+                Trả lời bằng tiếng Việt, ngắn gọn, tối đa 120 từ.
+                """
+
+                response = model.generate_content([full_prompt, img_compressed])
+                result = getattr(response, "text", "AI không trả dữ liệu.")
+
+                # HIỂN THỊ KẾT QUẢ
+                st.markdown("---")
+                col_img, col_res = st.columns([1, 1.2])
+
+                with col_img:
+                    st.image(img, caption="Mẫu bệnh hiện tại", use_container_width=True)
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("🌡️ T", f"{info.get('temp','?')}°C")
+                    c2.metric("💧 H", f"{info.get('hum','?')}%")
+                    c3.metric("💨 W", f"{info.get('wind','?')} m/s")
+
+                with col_res:
+                    st.markdown("### 🔬 Kết luận của Hệ thống")
+                    st.success(result)
+
+                    # Lưu bền vững vào Session (Byte nén)
+                    st.session_state["ai_result"] = result
+                    st.session_state["ai_image"] = buffer.getvalue() 
+
+            except Exception as e:
+                st.error(f"❌ Lỗi xử lý AI: {e}")
+
+# =========================================================
+# 12. NHẬT KÝ VÀ SẮP XẾP DỮ LIỆU (SMART LOGGING)
+# =========================================================
+st.divider()
+st.subheader("📝 Nhật ký ghi nhận bệnh")
+
+# Chống AttributeError cho session_state.data
+if "data" not in st.session_state:
+    st.session_state["data"] = {"plants": [], "disease_logs": []}
+
+plants = st.session_state.data.get("plants", [])
+plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
+
+selected_p = st.selectbox("Chọn cây đang kiểm tra", ["Chưa xác định"] + plant_names)
+
+if st.button("💾 Lưu chẩn đoán vào Nhật ký", use_container_width=True):
+    if "ai_result" in st.session_state:
+        log_entry = {
+            "date": str(date.today()),
+            "plant": selected_p,
+            "diagnosis": st.session_state["ai_result"]
+        }
+        
+        if "disease_logs" not in st.session_state.data:
+            st.session_state.data["disease_logs"] = []
+            
+        st.session_state.data["disease_logs"].append(log_entry)
+        save_data() # Hàm lưu file JSON của bạn
+        st.toast(f"Đã ghi nhận bệnh trạng cho {selected_p}", icon="✅")
+    else:
+        st.warning("⚠️ Vui lòng chụp ảnh và phân tích trước khi lưu.")
+
+# Hiển thị lịch sử (Sắp xếp thời gian chuẩn)
+if st.checkbox("📖 Xem lịch sử bệnh hại (Mới nhất)"):
+    logs = st.session_state.data.get("disease_logs", [])
+    if logs:
+        df_logs = pd.DataFrame(logs)
+        # Ép kiểu datetime để sort chuẩn (Chống lỗi sort string)
+        df_logs["date"] = pd.to_datetime(df_logs["date"])
+        df_logs = df_logs.sort_values("date", ascending=False)
+        
+        # Format lại ngày để hiển thị kiểu Việt Nam sau khi đã sort
+        df_logs["date"] = df_logs["date"].dt.strftime('%d/%m/%Y')
+        st.dataframe(df_logs, use_container_width=True)
+    else:
+        st.info("Chưa có nhật ký ghi nhận.")
 
 
 
