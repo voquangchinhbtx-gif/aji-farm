@@ -10,10 +10,23 @@ from PIL import Image, ImageOps
 import io
 
 # =========================================================
-# 0. KHỞI TẠO SESSION STATE (GIA CỐ HỆ THỐNG)
+# 0. KHỞI TẠO SESSION STATE & LOAD DATA
 # =========================================================
+DATA_FILE = "farm_data.json"
+
+@st.cache_data
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {"plants": [], "disease_logs": [], "treatment_feedback": []}
+    return {"plants": [], "disease_logs": [], "treatment_feedback": []}
+
+# Khởi tạo các biến session_state cần thiết
 if "data" not in st.session_state:
-    st.session_state.data = {"plants": [], "disease_logs": [], "treatment_feedback": []}
+    st.session_state.data = load_data()
 
 if "weather" not in st.session_state:
     st.session_state["weather"] = {"city": "Vườn Aji", "temp": 25, "hum": 80, "wind": 0, "desc": "Đang lấy dữ liệu..."}
@@ -23,6 +36,9 @@ if "ai_result" not in st.session_state:
 
 if "last_uploaded_eye" not in st.session_state:
     st.session_state["last_uploaded_eye"] = None
+
+if "ai_loading" not in st.session_state:
+    st.session_state["ai_loading"] = False
 
 # ================================
 # LẤY API KEY TỪ STREAMLIT SECRETS
@@ -44,22 +60,16 @@ try:
 except:
     pass
 
-DATA_FILE = "farm_data.json"
 WEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
 # =============================
-# 2. LOAD & SAVE DATA
+# 2. SAVE DATA (1️⃣ TỐI ƯU CACHE CHỈ ĐỊNH)
 # =============================
-if os.path.exists(DATA_FILE):
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            st.session_state.data = json.load(f)
-    except:
-        pass
-
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.data, f, ensure_ascii=False, indent=2)
+    # Chỉ xóa cache của hàm load_data, giữ lại cache thời tiết
+    load_data.clear()
 
 # =============================
 # 3. WEATHER FUNCTION
@@ -69,15 +79,16 @@ def get_weather(lat, lon):
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=vi"
         r = requests.get(url, timeout=10)
-        return r.json()
+        if r.status_code == 200:
+            return r.json()
+        return None
     except:
         return None
 
 # =============================
-# 4 & 5. GPS & WEATHER DATA (TỐI ƯU GPS)
+# 4 & 5. GPS & WEATHER DATA
 # =============================
 loc = st.session_state.get("location", None)
-
 if loc is None:
     loc_input = get_geolocation()
     if loc_input:
@@ -171,7 +182,7 @@ with col_b:
     else: st.success("✅ AN TOÀN")
 
 # =========================================================
-# 11. AI CHẨN ĐOÁN (CẢI TIẾN VISION)
+# 11. AI CHẨN ĐOÁN (2️⃣ CHỐNG SPAM & 3️⃣ TỐI ƯU KÍCH THƯỚC ẢNH)
 # =========================================================
 st.divider()
 st.subheader("🧠 AI Phân tích bệnh cây (Context-Aware AI)")
@@ -179,7 +190,6 @@ st.caption("📷 Chụp sát vùng lá bị bệnh để AI phân tích chính x
 img_file = st.camera_input("Chụp ảnh lá cây")
 
 if img_file is not None:
-    # Định danh ảnh mới dựa trên dữ liệu nhị phân
     img_id = img_file.getvalue()[:20]
     if st.session_state.get("last_uploaded_eye") != img_id:
         st.session_state.pop("ai_result", None)
@@ -187,7 +197,8 @@ if img_file is not None:
 
     try:
         img = ImageOps.exif_transpose(Image.open(img_file)).convert("RGB")
-        img.thumbnail((1024, 1024))
+        # 3️⃣ Resize 768px để nhanh hơn
+        img.thumbnail((768, 768))
         
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
@@ -203,22 +214,31 @@ if img_file is not None:
 
         with col2:
             st.markdown("### 🔬 Kết luận AI")
-            if st.button("🔍 Bắt đầu phân tích ngay", use_container_width=True):
+            
+            # 2️⃣ Disable nút khi đang load
+            is_loading = st.session_state.get("ai_loading", False)
+            if st.button("🔍 Bắt đầu phân tích ngay", use_container_width=True, disabled=is_loading):
                 if model:
+                    st.session_state["ai_loading"] = True
                     with st.spinner("AI đang soi bệnh..."):
-                        prompt = f"""Bạn là chuyên gia bệnh học thực vật. Hãy tập trung quan sát kỹ: đốm nâu, rìa lá cháy, phấn trắng, vết thối, hoặc biến màu trên lá.
+                        prompt = f"""Bạn là chuyên gia bệnh học thực vật. Tập trung: đốm nâu, rìa lá cháy, phấn trắng, vết thối, biến màu.
                         DỮ LIỆU KHÍ HẬU: {info}
                         Trả lời: 1. Bệnh nghi ngờ nhất | 2. Độ tin cậy (%) | 3. Nguyên nhân môi trường | 4. Cách xử lý sinh học.
                         Tiếng Việt, dưới 120 từ."""
                         
                         image_bytes = buf.getvalue()
-                        response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_bytes}])
-                        
-                        # Chống crash khi AI không trả về text
-                        if hasattr(response, "text"):
-                            st.session_state["ai_result"] = response.text
-                        else:
-                            st.session_state["ai_result"] = "AI chưa trả kết quả. Hãy thử chụp lại."
+                        try:
+                            response = model.generate_content([prompt, {"mime_type": "image/jpeg", "data": image_bytes}])
+                            if hasattr(response, "text"):
+                                st.session_state["ai_result"] = response.text
+                            else:
+                                st.session_state["ai_result"] = "AI chưa trả kết quả. Hãy thử chụp lại."
+                        except Exception:
+                            st.error("❌ Lỗi kết nối AI.")
+                        finally:
+                            st.session_state["ai_loading"] = False
+                            st.rerun() # Rerun để cập nhật trạng thái disabled của nút
+                else: st.error("⚠️ Chưa cấu hình API Key.")
 
             if st.session_state.get("ai_result"):
                 st.success(st.session_state["ai_result"])
@@ -227,7 +247,7 @@ if img_file is not None:
         st.error(f"❌ Lỗi: {e}")
 
 # =========================================================
-# 12. NHẬT KÝ (GIA CỐ UI)
+# 12. NHẬT KÝ
 # =========================================================
 st.divider()
 st.subheader("📝 Nhật ký ghi nhận bệnh")
@@ -235,7 +255,10 @@ st.subheader("📝 Nhật ký ghi nhận bệnh")
 if not plants:
     st.warning("Chưa có cây trong vườn để ghi nhật ký.")
 else:
-    plant_names = [f"{p.get('variety')} ({p.get('location')})" for p in plants]
+    plant_names = [
+        f"{p.get('variety','Cây')} ({p.get('location','Vườn')})"
+        for p in plants
+    ]
     selected_p = st.selectbox("Chọn cây đang kiểm tra", ["Chưa xác định"] + plant_names)
 
     if st.button("💾 Lưu chẩn đoán vào Nhật ký"):
@@ -264,10 +287,13 @@ if plants:
     if st.button("🚀 AI Tạo Quy trình chuẩn"):
         if model:
             with st.spinner("AI đang tổng hợp..."):
-                res = model.generate_content(f"Quy trình bón phân, sâu bệnh cho {target_plant} trong điều kiện {info}. Tiếng Việt, < 200 từ.")
-                st.session_state["current_procedure"] = getattr(res, "text", "")
-                st.session_state["current_plant"] = target_plant
-                st.markdown(st.session_state["current_procedure"])
+                try:
+                    res = model.generate_content(f"Quy trình bón phân, sâu bệnh cho {target_plant} trong điều kiện {info}. Tiếng Việt, < 200 từ.")
+                    st.session_state["current_procedure"] = getattr(res, "text", "")
+                    st.session_state["current_plant"] = target_plant
+                    st.markdown(st.session_state["current_procedure"])
+                except:
+                    st.error("Lỗi kết nối AI.")
 
 if st.session_state.get("current_procedure"):
     with st.form("feedback_form"):
@@ -280,6 +306,7 @@ if st.session_state.get("current_procedure"):
             save_data()
             st.session_state.pop("current_procedure", None)
             st.rerun()
+
 
 
 
