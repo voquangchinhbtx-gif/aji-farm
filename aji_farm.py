@@ -1,11 +1,8 @@
 import streamlit as st
-import os
-import json
-import re
+import requests
 import pandas as pd
-from datetime import datetime
-from PIL import Image
 import google.generativeai as genai
+from PIL import Image
 from streamlit_js_eval import get_geolocation
 
 # ==========================================
@@ -672,6 +669,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
