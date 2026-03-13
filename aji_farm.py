@@ -7,41 +7,94 @@ from PIL import Image
 from streamlit_js_eval import get_geolocation
 
 # ==========================================
-# 1. CẤU HÌNH
-# ==========================================
-st.set_page_config(page_title="Aji Farm Pro v4", page_icon="🌶️", layout="wide")
+# --- 1. CẤU HÌNH TRANG ---
+st.set_page_config(page_title="Aji Charapita Farm", layout="wide", page_icon="🌶️")
 
-DATA_FILE = "aji_master_data.json"
+API_KEY = "66ad043d6024749fa4bf92f0a6782397"
+DATA_FILE = "farm_data.json"
 
-# ==========================================
-# 2. AI CONFIG (BẢO MẬT)
-# ==========================================
-try:
-    API_KEY = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-flash")
-except:
-    model = None
-
-# ==========================================
-# 3. LOAD DATA
-# ==========================================
+# --- 2. HÀM XỬ LÝ DỮ LIỆU (DATABASE) ---
 def load_data():
+    """Tải dữ liệu từ file JSON, trả về dict mặc định nếu lỗi hoặc không có file."""
     if os.path.exists(DATA_FILE):
         try:
-            with open(DATA_FILE,"r",encoding="utf-8") as f:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             pass
-    return {"plants":[], "yields":[], "expenses":[], "supplies":[]}
-def save_data(data):
-    with open(DATA_FILE,"w",encoding="utf-8") as f:
-        json.dump(data,f,indent=2,ensure_ascii=False)
+    return {"plants": [], "yields": [], "expenses": [], "supplies": []}
 
+def save_data(data):
+    """Lưu dữ liệu vào file JSON."""
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+# Khởi tạo Session State cho dữ liệu (Chỉ chạy 1 lần khi load trang)
 if "data" not in st.session_state:
     st.session_state.data = load_data()
 
-data = st.session_state.data
+# --- 3. HÀM THỜI TIẾT (LOGIC) ---
+@st.cache_data(ttl=600)
+def fetch_weather(lat, lon):
+    """Gọi API lấy thời tiết dựa trên tọa độ."""
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=vi"
+        res = requests.get(url, timeout=5)
+        return res.json() if res.status_code == 200 else None
+    except Exception:
+        return None
+
+# --- 4. XỬ LÝ VỊ TRÍ & DỮ LIỆU THỜI TIẾT (ẨN) ---
+# Lấy tọa độ GPS từ trình duyệt
+loc = get_geolocation()
+
+# Chuẩn bị sẵn thông tin hiển thị (Mặc định)
+weather_display = {
+    "temp": 25, 
+    "humi": 80, 
+    "desc": "Đang xác định vị trí...", 
+    "city": "Huế (Mặc định)"
+}
+
+# Nếu có GPS, cập nhật thông tin thật
+if loc and "coords" in loc:
+    lat, lon = loc["coords"]["latitude"], loc["coords"]["longitude"]
+    w_data = fetch_weather(lat, lon)
+    if w_data:
+        weather_display.update({
+            "temp": w_data["main"]["temp"],
+            "humi": w_data["main"]["humidity"],
+            "desc": w_data["weather"][0]["description"].capitalize(),
+            "city": w_data.get("name", "Vườn Kim Long")
+        })
+
+# --- 5. GIAO DIỆN HIỂN THỊ (DUY NHẤT 1 LẦN) ---
+st.title("🌶️ Aji Charapita Farm Management")
+
+# Sử dụng st.empty() làm vùng chứa để ghi đè, CHỐNG LẶP GIAO DIỆN
+main_view = st.empty()
+
+with main_view.container():
+    st.subheader(f"📊 Trung tâm điều khiển - {weather_display['city']}")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Nhiệt độ", f"{weather_display['temp']}°C", 
+                  delta="Nóng" if weather_display['temp'] > 32 else None,
+                  delta_color="inverse")
+    
+    with col2:
+        st.metric("Độ ẩm", f"{weather_display['humi']}%")
+        
+    with col3:
+        st.write("**Thời tiết thực tế**")
+        st.info(weather_display["desc"])
+    
+    st.divider()
+    
+    # Hiển thị tóm tắt dữ liệu nông trại
+    st.write(f"🌿 Hiện có **{len(st.session_state.data['plants'])}** loại cây đang được theo dõi.")
 
 # ==========================================
 # 4. WEATHER HUẾ - PHIÊN BẢN CHỐNG CRASH
@@ -670,6 +723,7 @@ Chỉ dùng giải pháp sinh học/hữu cơ.
 
         else:
             st.warning("⚠️ Không có dự đoán đủ tin cậy.")
+
 
 
 
