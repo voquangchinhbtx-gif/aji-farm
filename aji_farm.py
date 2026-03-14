@@ -1428,7 +1428,7 @@ from database import (
 )
 
 
-    get_crop_list,
+   
     get_crop_name,
     get_crop_water_need
 )
