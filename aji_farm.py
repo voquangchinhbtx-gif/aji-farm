@@ -80,7 +80,6 @@ info = st.session_state.get("weather", {"city": "Đang lấy...", "temp": 25, "h
 # =========================================================
 st.title("🌶️ Aji Farm Management Pro")
 st.subheader(f"📍 {info['city']}")
-
 c1, c2, c3 = st.columns(3)
 c1.metric("🌡 Nhiệt độ", f"{info['temp']} °C")
 c2.metric("💧 Độ ẩm", f"{info['hum']} %")
