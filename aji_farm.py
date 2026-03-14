@@ -1670,7 +1670,7 @@ from streamlit_js_eval import get_geolocation
 
 from config import APP_NAME
 from database import load_data
-from dashboard import show_dashboard
+
 from garden_manager import show_garden_manager
 from gemini_ai import load_gemini, diagnose_plant
 from npk_ai import recommend_npk
