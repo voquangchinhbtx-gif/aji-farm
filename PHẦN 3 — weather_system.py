@@ -200,3 +200,23 @@ def farm_environment_analysis(weather):
         )
 
     return analysis
+    # ==========================================
+# WEATHER SUMMARY FOR AI
+# ==========================================
+
+def generate_weather_summary(weather):
+
+    if not weather:
+        return "Không có dữ liệu thời tiết."
+
+    temp = weather.get("temp", "?")
+    humidity = weather.get("humidity", "?")
+    wind = weather.get("wind", "?")
+
+    summary = f"""
+Nhiệt độ: {temp}°C
+Độ ẩm: {humidity}%
+Gió: {wind} m/s
+"""
+
+    return summary
