@@ -478,7 +478,95 @@ else:
 
     st.info(f"💡 Dự báo dựa trên tình trạng nhóm **{plant_type_focus}** tại {info['city']}.")
 
+# =========================================================
+# 8 & 9. QUẢN LÝ DANH SÁCH (CRUD + SEARCH + ANALYTICS)
+# =========================================================
+plants = st.session_state.data.get("plants", [])
 
+# 1️⃣ Dashboard Tổng quát trên đầu
+c_top1, c_top2 = st.columns([2, 1])
+with c_top1:
+    st.subheader("🌿 Quản lý Vườn")
+with c_top2:
+    st.metric("Tổng số cây", len(plants))
+
+if plants:
+    df_p = pd.DataFrame(plants)
+    
+    # 3️⃣ Chuẩn hóa hiển thị tuổi cây
+    if "age_years" in df_p.columns:
+        df_p["age_years"] = df_p["age_years"].fillna(0).astype(int)
+        df_p = df_p.rename(columns={"age_years": "Tuổi (năm)"})
+
+    # 1️⃣ Tìm cây nhanh (Search Engine)
+    search = st.text_input("🔎 Tìm kiếm cây (theo giống hoặc tên)", placeholder="Ví dụ: Ớt, Cà chua...")
+    
+    if search:
+        # Tìm kiếm không phân biệt hoa thường trong cột 'variety'
+        df_display = df_p[df_p["variety"].str.contains(search, case=False, na=False)]
+    else:
+        df_display = df_p
+
+    st.dataframe(df_display, use_container_width=True)
+
+    # --- KHU VỰC QUẢN LÝ (SỬA & XÓA) ---
+    st.divider()
+    col_manage1, col_manage2 = st.columns(2)
+
+    with col_manage1:
+        st.write("### ✏️ Chỉnh sửa thông tin")
+        plant_to_edit_str = st.selectbox(
+            "Chọn cây cần sửa:",
+            [f"{i} | {p.get('variety','Cây')} | {p.get('location','Vườn')}" for i, p in enumerate(plants)],
+            key="edit_select"
+        )
+        edit_idx = int(plant_to_edit_str.split(" | ")[0])
+        p_edit = plants[edit_idx]
+
+        with st.expander("Mở Form chỉnh sửa"):
+            with st.form("edit_form"):
+                new_variety = st.text_input("Giống cây", p_edit.get('variety'))
+                new_loc = st.text_input("Vị trí", p_edit.get('location'))
+                new_age = st.number_input("Tuổi (năm)", 0, 100, int(p_edit.get('age_years', 0)))
+                
+                if st.form_submit_button("💾 Lưu thay đổi"):
+                    st.session_state.data["plants"][edit_idx].update({
+                        "variety": new_variety,
+                        "location": new_loc,
+                        "age_years": new_age
+                    })
+                    save_data()
+                    st.success("Đã cập nhật!")
+                    st.rerun()
+
+    with col_manage2:
+        st.write("### 🗑️ Xóa cây")
+        plant_to_del_str = st.selectbox(
+            "Chọn cây muốn xóa:",
+            [f"{i} | {p.get('variety','Cây')} | {p.get('location','Vườn')}" for i, p in enumerate(plants)],
+            key="del_select"
+        )
+        del_idx = int(plant_to_del_str.split(" | ")[0])
+        
+        confirm_del = st.checkbox("Tôi chắc chắn muốn xóa cây này", key="confirm_del")
+        if st.button("❌ Xác nhận Xóa", type="primary", disabled=not confirm_del):
+            removed = st.session_state.data["plants"].pop(del_idx)
+            save_data()
+            st.toast(f"Đã xóa {removed.get('variety')}!")
+            st.rerun()
+
+    # 2️⃣ Thống kê đẹp hơn
+    st.divider()
+    st.write("### 📊 Thống kê phân bổ")
+    c_chart1, c_chart2 = st.columns(2)
+    with c_chart1:
+        st.write("**Số lượng theo loại cây**")
+        st.bar_chart(df_p["type"].value_counts())
+    with c_chart2:
+        st.write("**Số lượng theo vị trí (Vườn)**")
+        st.bar_chart(df_p["location"].value_counts())
+else:
+    st.info("Chưa có cây nào trong vườn")
 
 
 
