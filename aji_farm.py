@@ -8,8 +8,8 @@ import google.generativeai as genai
 from PIL import Image, ImageOps
 import io
 import copy
+import numpy as np
 from streamlit_js_eval import get_geolocation
-import numpy as np   # ⭐ BỔ SUNG
 
 # =====================================================
 # CONFIG
@@ -25,7 +25,7 @@ DATA_FILE="aji_farm_db.json"
 WEATHER_KEY="66ad043d6024749fa4bf92f0a6782397"
 
 # =====================================================
-# LOAD AI
+# LOAD AI GEMINI
 # =====================================================
 
 @st.cache_resource
@@ -33,63 +33,11 @@ def load_ai():
     try:
         GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
         genai.configure(api_key=GEMINI_KEY)
-
-        return genai.GenerativeModel("gemini-1.5-flash-latest")
-
+        return genai.GenerativeModel("gemini-1.5-flash")
     except:
         return None
 
 ai_model = load_ai()
-
-# =====================================================
-# USER LOCATION (GPS)
-# =====================================================
-
-geo = get_geolocation()
-
-if geo and "coords" in geo:
-    lat = geo["coords"]["latitude"]
-    lon = geo["coords"]["longitude"]
-else:
-    lat = 16.4637
-    lon = 107.5909
-
-# =====================================================
-# CROP DATABASE
-# =====================================================
-
-CROP_DB={
-    "aji_charapita":{
-        "name":"Ớt Aji Charapita",
-        "water":500,
-        "care":"Nắng mạnh, đất thoát nước tốt, bón hữu cơ"
-    },
-    "tomato":{
-        "name":"Cà chua",
-        "water":450,
-        "care":"Cần giàn leo, tỉa chồi nách, phòng nấm sương mai"
-    },
-    "lettuce":{
-        "name":"Xà lách",
-        "water":200,
-        "care":"Ưa mát, giữ ẩm đất, tránh nắng gắt"
-    },
-    "durian":{
-        "name":"Sầu riêng",
-        "water":2000,
-        "care":"Đất sâu, thoát nước tốt, bón hữu cơ định kỳ"
-    },
-    "mango":{
-        "name":"Xoài",
-        "water":1500,
-        "care":"Phòng rầy bông khi ra hoa, tỉa cành"
-    },
-    "basil":{
-        "name":"Húng quế",
-        "water":150,
-        "care":"Ngắt hoa để kích thích ra lá"
-    }
-}
 
 # =====================================================
 # DATABASE
@@ -109,15 +57,6 @@ def load_data():
     return copy.deepcopy(INIT_DATA)
 
 def save():
-
-    st.session_state.data["inventory"]["fertilizer"]=min(
-        st.session_state.data["inventory"]["fertilizer"],100
-    )
-
-    st.session_state.data["inventory"]["pesticide"]=min(
-        st.session_state.data["inventory"]["pesticide"],100
-    )
-
     with open(DATA_FILE,"w",encoding="utf-8") as f:
         json.dump(st.session_state.data,f,ensure_ascii=False,indent=2)
 
@@ -125,25 +64,27 @@ if "data" not in st.session_state:
     st.session_state.data=load_data()
 
 # =====================================================
-# WEATHER (GPS)
+# CROP DATABASE
+# =====================================================
+
+CROP_DB={
+    "aji_charapita":{"name":"Ớt Aji Charapita","water":500,"care":"Nắng mạnh, đất thoát nước tốt"},
+    "tomato":{"name":"Cà chua","water":450,"care":"Cần giàn leo, tỉa chồi"},
+    "lettuce":{"name":"Xà lách","water":200,"care":"Ưa mát"},
+    "durian":{"name":"Sầu riêng","water":2000,"care":"Đất sâu"},
+    "mango":{"name":"Xoài","water":1500,"care":"Phòng rầy bông"},
+    "basil":{"name":"Húng quế","water":150,"care":"Ngắt hoa kích lá"}
+}
+
+# =====================================================
+# GPS WEATHER
 # =====================================================
 
 @st.cache_data(ttl=600)
 def get_weather(lat,lon):
-
     try:
-
         url=f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_KEY}&units=metric"
-
-        r=requests.get(url,timeout=5)
-
-        if r.status_code != 200:
-            return{
-                "temp":28,
-                "hum":70,
-                "wind":2
-            }
-
+        r=requests.get(url)
         w=r.json()
 
         return{
@@ -151,55 +92,54 @@ def get_weather(lat,lon):
             "hum":w["main"]["humidity"],
             "wind":w["wind"]["speed"]
         }
-
     except:
+        return {"temp":28,"hum":70,"wind":2}
 
-        return{
-            "temp":28,
-            "hum":70,
-            "wind":2
-        }
+geo=get_geolocation()
 
-w_info=get_weather(lat,lon)
+if geo:
+    w_info=get_weather(geo["coords"]["latitude"],geo["coords"]["longitude"])
+else:
+    w_info={"temp":28,"hum":70,"wind":2}
 
 # =====================================================
-# ⭐ AI PHÂN TÍCH NPK BẰNG MÀU LÁ (LOCAL)
+# AI NPK LOCAL (KHÔNG GEMINI)
 # =====================================================
 
-def analyze_leaf_npk(image):
+def analyze_npk(img):
 
-    img = np.array(image)
+    arr=np.array(img)
 
-    r = img[:,:,0].mean()
-    g = img[:,:,1].mean()
-    b = img[:,:,2].mean()
+    r=arr[:,:,0].mean()
+    g=arr[:,:,1].mean()
+    b=arr[:,:,2].mean()
 
-    result = []
+    result=[]
 
-    if g < r and g < 120:
-        result.append("⚠ Có dấu hiệu thiếu ĐẠM (N) – lá vàng hoặc nhạt")
+    if g < r*0.9:
+        result.append("Thiếu Nitrogen (N) → lá vàng")
 
-    if b > r and b > g:
-        result.append("⚠ Có thể thiếu LÂN (P) – lá xanh đậm hoặc hơi tím")
+    if b > g*0.8:
+        result.append("Thiếu Phosphorus (P) → lá sẫm")
 
-    if r > 150 and g < 120:
-        result.append("⚠ Có dấu hiệu thiếu KALI (K) – mép lá cháy")
+    if r > g*1.2:
+        result.append("Thiếu Potassium (K) → cháy mép lá")
 
     if not result:
-        result.append("✅ Lá có vẻ dinh dưỡng cân đối")
+        result.append("Lá bình thường")
 
     return result
 
 # =====================================================
-# UI TABS
+# DASHBOARD
 # =====================================================
 
 st.title("🌶 AJI FARM AI")
 
 tab1,tab2,tab3=st.tabs([
-"🌤 Tổng quan",
-"🌱 Vườn cây",
-"🤖 Bác sĩ AI"
+    "🌤 Tổng quan",
+    "🌱 Vườn cây",
+    "📷 Bác sĩ AI"
 ])
 
 # =====================================================
@@ -218,13 +158,30 @@ with tab1:
 
     st.metric("🦠 Nguy cơ sâu bệnh",f"{int(risk)}%")
 
+    if w_info["hum"]>80 and w_info["temp"]>26:
+
+        st.error("""
+Nguy cơ cao:
+• Bọ trĩ
+• Nấm phấn trắng
+
+Nguyên nhân:
+• độ ẩm cao
+• lá rậm
+
+Xử lý:
+Sinh học: neem oil
+
+Hóa học: Abamectin
+""")
+
 # =====================================================
 # TAB 2
 # =====================================================
 
 with tab2:
 
-    st.subheader("🌱 Thêm cây trồng")
+    st.subheader("🌱 Thêm cây")
 
     with st.form("addplant"):
 
@@ -249,6 +206,7 @@ with tab2:
             st.rerun()
 
     st.divider()
+
     st.subheader("🌿 Danh sách cây")
 
     if st.session_state.data["plants"]:
@@ -261,14 +219,7 @@ with tab2:
 
         df["Tuổi cây"]=(datetime.now()-df["date"]).dt.days
 
-        st.dataframe(
-            df[["Tên","date","Tuổi cây"]],
-            use_container_width=True
-        )
-
-    else:
-
-        st.info("Chưa có cây nào")
+        st.dataframe(df[["Tên","date","Tuổi cây"]])
 
 # =====================================================
 # TAB 3
@@ -276,7 +227,7 @@ with tab2:
 
 with tab3:
 
-    st.subheader("📷 AI nhận diện bệnh cây")
+    st.subheader("📷 AI nhận diện bệnh")
 
     cam=st.camera_input("Chụp lá cây")
 
@@ -286,67 +237,81 @@ with tab3:
 
         st.image(img,width=350)
 
-        if st.button("AI phân tích") and ai_model:
+        st.subheader("🌿 Phân tích NPK (AI local)")
 
-            with st.spinner("🤖 Đang hỏi chuyên gia AI..."):
+        result=analyze_npk(img)
 
-                try:
+        for r in result:
+            st.warning(r)
+
+        if st.button("AI phân tích bệnh"):
+
+            if ai_model:
+
+                with st.spinner("Đang hỏi ý kiến chuyên gia AI..."):
 
                     buf=io.BytesIO()
                     img.save(buf,format="JPEG")
 
-                    prompt = f"""
+                    prompt=f"""
 Bạn là chuyên gia bệnh cây.
 
-Thông tin môi trường hiện tại:
-Nhiệt độ: {w_info['temp']}°C
-Độ ẩm: {w_info['hum']}%
+Thông tin môi trường:
+Nhiệt độ {w_info['temp']}°C
+Độ ẩm {w_info['hum']}%
 
-Dựa vào ảnh cây trồng hãy:
+Dựa vào ảnh hãy:
+
 1. Chẩn đoán bệnh
 2. Đánh giá mức độ
-3. Nguyên nhân
-4. Xử lý sinh học
-5. Xử lý hóa học
-6. Phòng ngừa
+3. Đưa hướng xử lý sinh học
+4. Đưa hướng xử lý hóa học
 """
 
                     res=ai_model.generate_content(
-                        [prompt,{"mime_type":"image/jpeg","data":buf.getvalue()}]
+                        [prompt,{
+                            "mime_type":"image/jpeg",
+                            "data":buf.getvalue()
+                        }],
+                        generation_config={"max_output_tokens":600}
                     )
 
                     st.success("Kết quả AI")
                     st.write(res.text)
 
-                except:
+# =====================================================
+# AI CHAT
+# =====================================================
 
-                    st.error("AI đang bận, thử lại sau.")
+st.divider()
+st.subheader("🤖 Trợ lý nông nghiệp")
 
-    st.divider()
+for c in st.session_state.data["chat"][-3:]:
 
-    # ⭐ PHẦN MỚI
+    with st.chat_message("user"):
+        st.write(c["q"])
 
-    st.subheader("🌿 Kiểm tra dinh dưỡng NPK (AI local - không tốn token)")
+    with st.chat_message("assistant"):
+        st.write(c["a"])
 
-    leaf_file = st.file_uploader(
-        "Upload ảnh lá cây để kiểm tra NPK",
-        type=["jpg","png","jpeg"]
-    )
+q=st.chat_input("Hỏi về sâu bệnh, phân bón...")
 
-    if leaf_file:
+if q and ai_model:
 
-        leaf_img = Image.open(leaf_file)
+    with st.spinner("AI đang suy nghĩ..."):
 
-        st.image(leaf_img,width=350)
+        res=ai_model.generate_content(
+            f"Bạn là chuyên gia nông nghiệp. Trả lời dễ hiểu cho nông dân: {q}",
+            generation_config={"max_output_tokens":400}
+        )
 
-        if st.button("Phân tích NPK"):
+    st.session_state.data["chat"].append({
+        "q":q,
+        "a":res.text
+    })
 
-            result = analyze_leaf_npk(leaf_img)
-
-            st.success("Kết quả phân tích")
-
-            for r in result:
-                st.write(r)
+    save()
+    st.rerun()
 
 # =====================================================
 # SIDEBAR
