@@ -307,7 +307,87 @@ if plants:
 else:
     st.info("Chưa có cây nào trong vườn")
 
+# =========================================================
+# 13 & 14. AI HỌC LỆNH & ĐỀ XUẤT QUY TRÌNH (BẢN FIX LỖI)
+# =========================================================
+st.divider()
+st.subheader("🧬 AI Học & Đề xuất Quy trình")
 
+if not plants:
+    st.info("Thêm cây vào vườn để AI có thể lập quy trình chăm sóc.")
+else:
+    plant_names = [f"{p.get('variety','Cây')} ({p.get('location','Vườn')})" for p in plants]
+    target_plant = st.selectbox("Chọn cây cần lập quy trình:", plant_names, key="proc_select")
+    
+    # Nút bấm kích hoạt AI
+    if st.button("🚀 AI Tạo Quy trình chuẩn", use_container_width=True):
+        if model:
+            with st.spinner("AI đang tổng hợp dữ liệu và kinh nghiệm..."):
+                try:
+                    # Lấy 5 kinh nghiệm cũ của đúng loại cây này
+                    history = [
+                        h for h in st.session_state.data.get("treatment_feedback", [])
+                        if target_plant in h["plant"]
+                    ][-5:]
+                    
+                    history_text = "\n".join(
+                        [f"- {h['date']}: {h['score']} ({h['user_note']})" for h in history]
+                    ) if history else "Chưa có kinh nghiệm cũ."
+
+                    prompt_proc = f"""
+                    Bạn là chuyên gia nông nghiệp.
+                    KINH NGHIỆM RIÊNG VỚI {target_plant}: {history_text[:500]}
+                    THỜI TIẾT: {info['temp']}°C, ẩm {info['hum']}%, {info['desc']}
+
+                    NHIỆM VỤ: Lập quy trình chăm sóc 7 ngày tới (tưới nước, bón phân, phòng bệnh).
+                    YÊU CẦU: Gạch đầu dòng, tiếng Việt, dưới 120 từ.
+                    """
+                    
+                    # Gọi AI và lưu trực tiếp vào session_state
+                    res = model.generate_content(prompt_proc)
+                    if hasattr(res, "text"):
+                        st.session_state["current_procedure"] = res.text
+                        st.session_state["current_plant_name"] = target_plant
+                    else:
+                        st.error("AI không trả về văn bản.")
+                except Exception as e:
+                    st.error(f"Lỗi gọi AI: {e}")
+        else:
+            st.error("Chưa có API Key.")
+
+    # Hiển thị kết quả (Kiểm tra xem quy trình có khớp với cây đang chọn không)
+    if "current_procedure" in st.session_state and st.session_state.get("current_plant_name") == target_plant:
+        st.markdown("---")
+        st.markdown(f"### 📋 Quy trình đề xuất cho {target_plant}")
+        st.markdown(st.session_state["current_procedure"])
+        
+        # Phần Đánh giá/Feedback
+        with st.expander("⭐ Đánh giá hiệu quả (Để AI học kinh nghiệm)"):
+            with st.form("feedback_form_final"):
+                score = st.select_slider("Mức độ hiệu quả:", options=["Thất bại", "Kém", "Ổn", "Tốt", "Rất tốt"])
+                note = st.text_area("Ghi chú thực tế:")
+                if st.form_submit_button("💾 Lưu kinh nghiệm"):
+                    new_fb = {
+                        "date": str(date.today()), 
+                        "plant": st.session_state["current_plant_name"], 
+                        "score": score, 
+                        "user_note": note
+                    }
+                    if "treatment_feedback" not in st.session_state.data: 
+                        st.session_state.data["treatment_feedback"] = []
+                    
+                    st.session_state.data["treatment_feedback"].append(new_fb)
+                    save_data()
+                    st.success("Đã ghi nhớ kinh nghiệm!")
+                    # Xóa quy trình cũ để sẵn sàng cho lần sau
+                    del st.session_state["current_procedure"]
+                    st.rerun()
+
+# Xem lịch sử
+if st.checkbox("📚 Xem nhật ký kinh nghiệm AI đã học"):
+    fbs = st.session_state.data.get("treatment_feedback", [])
+    if fbs:
+        st.dataframe(pd.DataFrame(fbs).sort_values("date", ascending=False), use_container_width=True)
 
 
 
