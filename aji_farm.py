@@ -1838,4 +1838,17 @@ elif menu == "🌿 Tư vấn phân bón":
         )
 
         st.success(result)
+ # File: crop_database.py
+
+def get_crop_info(crop_name):
+    """Hàm này dành cho gemini_ai.py"""
+    return f"Thông tin chi tiết về {crop_name}"
+
+def get_crop_name(crop_id):
+    """Hàm này dành cho dashboard.py"""
+    return f"Tên cây trồng của mã số {crop_id}"
+
+# Nếu bạn có dữ liệu thật, hãy khai báo ở đây
+DATA_FILE = "data.csv"       
+        
 
