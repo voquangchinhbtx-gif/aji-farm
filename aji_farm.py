@@ -9,81 +9,136 @@ import google.generativeai as genai
 from PIL import Image, ImageOps
 import io
 
+import streamlit as st
+import os
+import json
+import requests
+import google.generativeai as genai
+from streamlit_js_eval import get_geolocation
+
 # =========================================================
-# 0. KHỞI TẠO & LOAD DATA (TỐI ƯU DISK)
+# 1. CẤU HÌNH TRANG
+# =========================================================
+st.set_page_config(
+    page_title="Aji Farm Pro",
+    layout="wide",
+    page_icon="🌶️"
+)
+
+# =========================================================
+# 2. KHỞI TẠO & LOAD DATA
 # =========================================================
 DATA_FILE = "farm_data.json"
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except:
-            return {"plants": [], "disease_logs": [], "treatment_feedback": []}
-    return {"plants": [], "disease_logs": [], "treatment_feedback": []}
+            pass
+    return {
+        "plants": [],
+        "disease_logs": [],
+        "treatment_feedback": []
+    }
 
 def save_data():
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(st.session_state.data, f, ensure_ascii=False, indent=2)
-    load_data.clear() # Chỉ refresh data cây
+    load_data.clear()
 
 if "data" not in st.session_state:
     st.session_state.data = load_data()
 
-# Khởi tạo các biến UI khác
-for key in ["weather", "ai_result", "ai_loading", "current_procedure"]:
-    if key not in st.session_state:
-        st.session_state[key] = None if key != "ai_loading" else False
+# Khởi tạo session variables
+defaults = {
+    "weather": None,
+    "ai_result": None,
+    "ai_loading": False,
+    "current_procedure": None
+}
+
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # =========================================================
-# 1. CẤU HÌNH AI & WEATHER
+# 3. CẤU HÌNH AI
 # =========================================================
-st.set_page_config(page_title="Aji Farm Pro", layout="wide", page_icon="🌶️")
-
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
+
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    # FIX LỖI 404: Dùng tên model đầy đủ
     model = genai.GenerativeModel("models/gemini-1.5-flash")
 else:
     model = None
 
+# =========================================================
+# 4. WEATHER API
+# =========================================================
 WEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
 
 @st.cache_data(ttl=600)
 def get_weather(lat, lon):
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=vi"
+        url = (
+            f"https://api.openweathermap.org/data/2.5/weather?"
+            f"lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=vi"
+        )
         r = requests.get(url, timeout=10)
-        return r.json() if r.status_code == 200 else None
-    except: return None
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return None
 
-# Lấy GPS & Weather
-loc = get_geolocation()
+# =========================================================
+# 5. LẤY GPS + WEATHER
+# =========================================================
+try:
+    loc = get_geolocation()
+except:
+    loc = None
+
 if loc and "coords" in loc:
-    w = get_weather(loc["coords"]["latitude"], loc["coords"]["longitude"])
+    lat = loc["coords"]["latitude"]
+    lon = loc["coords"]["longitude"]
+
+    w = get_weather(lat, lon)
+
     if w:
-        st.session_state["weather"] = {
+        desc = w.get("weather", [{"description": "N/A"}])[0]["description"]
+
+        st.session_state.weather = {
             "city": w.get("name", "Vườn"),
-            "temp": w["main"]["temp"],
-            "hum": w["main"]["humidity"],
+            "temp": w.get("main", {}).get("temp", 25),
+            "hum": w.get("main", {}).get("humidity", 80),
             "wind": w.get("wind", {}).get("speed", 0),
-            "desc": w["weather"][0]["description"].capitalize()
+            "desc": desc.capitalize()
         }
 
-info = st.session_state.get("weather", {"city": "Đang lấy...", "temp": 25, "hum": 80, "wind": 0, "desc": "N/A"})
+# =========================================================
+# 6. DASHBOARD
+# =========================================================
+info = st.session_state.get("weather") or {
+    "city": "Đang lấy...",
+    "temp": 25,
+    "hum": 80,
+    "wind": 0,
+    "desc": "N/A"
+}
 
-# =========================================================
-# 2. DASHBOARD CHÍNH
-# =========================================================
 st.title("🌶️ Aji Farm Management Pro")
-st.subheader(f"📍 {info.get('city', 'Unknown City')}")
+st.subheader(f"📍 {info['city']}")
+
 c1, c2, c3 = st.columns(3)
+
 c1.metric("🌡 Nhiệt độ", f"{info['temp']} °C")
 c2.metric("💧 Độ ẩm", f"{info['hum']} %")
 c3.metric("💨 Gió", f"{info['wind']} m/s")
+
 st.info(info["desc"])
 
 # =========================================================
