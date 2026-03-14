@@ -1,340 +1,1846 @@
-import streamlit as st
+# ==========================================
+# AJI FARM AI - SYSTEM CONFIG
+# ==========================================
+
+APP_NAME = "Aji Farm AI"
+APP_ICON = "🌶"
+
+# ==========================================
+# DATABASE
+# ==========================================
+
+DATA_FILE = "aji_farm_db.json"
+
+# ==========================================
+# WEATHER API
+# ==========================================
+
+OPENWEATHER_API_KEY = "66ad043d6024749fa4bf92f0a6782397"
+
+# ==========================================
+# DEFAULT LOCATION (Huế nếu GPS lỗi)
+# ==========================================
+
+DEFAULT_LAT = 16.4637
+DEFAULT_LON = 107.5909
+
+# ==========================================
+# AI MODEL
+# ==========================================
+
+GEMINI_MODEL = "gemini-1.5-flash"
+
+# ==========================================
+# IMAGE SETTINGS
+# ==========================================
+
+IMAGE_FORMAT = "JPEG"
+
+# ==========================================
+# NPK ANALYSIS THRESHOLDS
+# ==========================================
+
+N_THRESHOLD = 0.92
+P_THRESHOLD = 0.85
+K_THRESHOLD = 1.15
+
+# ==========================================
+# WEATHER WARNING LEVELS
+# ==========================================
+
+TEMP_WARNING = 35
+HUMIDITY_WARNING = 80
+
+# ==========================================
+# IRRIGATION SETTINGS
+# ==========================================
+
+HOT_TEMP = 30
+WATER_INCREASE_RATIO = 1.2
+# ==========================================
+# AJI FARM AI - DATABASE SYSTEM
+# ==========================================
+
 import json
 import os
-import requests
-from datetime import date, datetime
-import pandas as pd
-import google.generativeai as genai
-from PIL import Image, ImageOps
-import io
 import copy
-import numpy as np
+from datetime import datetime
+
+from config import DATA_FILE
+
+
+# ==========================================
+# DATA SCHEMA (CẤU TRÚC DATABASE)
+# ==========================================
+
+INIT_DATA = {
+
+    # Danh sách cây trồng
+    "plants": [],
+
+    # Nhật ký bệnh
+    "disease_logs": [],
+
+    # Nhật ký tưới nước
+    "irrigation_logs": [],
+
+    # Nhật ký bón phân
+    "fertilizer_logs": [],
+
+    # Kho vật tư
+    "inventory": {
+        "fertilizer": 100,
+        "pesticide": 100
+    },
+
+    # AI chat history
+    "chat_history": []
+}
+
+
+# ==========================================
+# LOAD DATABASE
+# ==========================================
+
+def load_data():
+
+    if os.path.exists(DATA_FILE):
+
+        try:
+
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            return data
+
+        except:
+
+            return copy.deepcopy(INIT_DATA)
+
+    else:
+
+        return copy.deepcopy(INIT_DATA)
+
+
+# ==========================================
+# SAVE DATABASE
+# ==========================================
+
+def save_data(data):
+
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+
+# ==========================================
+# RESET DATABASE
+# ==========================================
+
+def reset_database():
+
+    data = copy.deepcopy(INIT_DATA)
+
+    save_data(data)
+
+    return data
+
+
+# ==========================================
+# PLANT MANAGEMENT
+# ==========================================
+
+def add_plant(data, crop_id, plant_date):
+
+    plant = {
+
+        "crop": crop_id,
+
+        "date": str(plant_date),
+
+        "created_at": datetime.now().isoformat()
+    }
+
+    data["plants"].append(plant)
+
+    return data
+
+
+def delete_plant(data, index):
+
+    if index < len(data["plants"]):
+
+        data["plants"].pop(index)
+
+    return data
+
+
+def get_plants(data):
+
+    return data["plants"]
+
+
+# ==========================================
+# DISEASE LOG SYSTEM
+# ==========================================
+
+def add_disease_log(data, crop, note):
+
+    log = {
+
+        "date": str(datetime.now().date()),
+
+        "crop": crop,
+
+        "note": note
+    }
+
+    data["disease_logs"].append(log)
+
+    return data
+
+
+def get_disease_logs(data):
+
+    return data["disease_logs"]
+
+
+# ==========================================
+# IRRIGATION LOG SYSTEM
+# ==========================================
+
+def add_irrigation_log(data, crop, water_amount):
+
+    log = {
+
+        "date": str(datetime.now().date()),
+
+        "crop": crop,
+
+        "water_ml": water_amount
+    }
+
+    data["irrigation_logs"].append(log)
+
+    return data
+
+
+def get_irrigation_logs(data):
+
+    return data["irrigation_logs"]
+
+
+# ==========================================
+# FERTILIZER LOG SYSTEM
+# ==========================================
+
+def add_fertilizer_log(data, crop, fertilizer_type, amount):
+
+    log = {
+
+        "date": str(datetime.now().date()),
+
+        "crop": crop,
+
+        "type": fertilizer_type,
+
+        "amount": amount
+    }
+
+    data["fertilizer_logs"].append(log)
+
+    return data
+
+
+def get_fertilizer_logs(data):
+
+    return data["fertilizer_logs"]
+
+
+# ==========================================
+# INVENTORY MANAGEMENT
+# ==========================================
+
+def update_inventory(data, item, amount):
+
+    if item in data["inventory"]:
+
+        data["inventory"][item] += amount
+
+    else:
+
+        data["inventory"][item] = amount
+
+    return data
+
+
+def get_inventory(data):
+
+    return data["inventory"]
+
+
+# ==========================================
+# CHAT HISTORY
+# ==========================================
+
+def add_chat(data, user_msg, ai_msg):
+
+    chat = {
+
+        "time": datetime.now().isoformat(),
+
+        "user": user_msg,
+
+        "ai": ai_msg
+    }
+
+    data["chat_history"].append(chat)
+
+    return data
+
+
+def get_chat_history(data):
+
+    return data["chat_history"]
+# ==========================================
+# AJI FARM AI - WEATHER + GPS SYSTEM
+# ==========================================
+
+import requests
+from datetime import datetime
+
+from config import (
+    OPENWEATHER_API_KEY,
+    DEFAULT_LAT,
+    DEFAULT_LON,
+    TEMP_WARNING,
+    HUMIDITY_WARNING,
+    HOT_TEMP,
+    WATER_INCREASE_RATIO
+)
+
+# ==========================================
+# GET WEATHER FROM API
+# ==========================================
+
+def fetch_weather(lat, lon):
+
+    url = (
+        "https://api.openweathermap.org/data/2.5/weather"
+        f"?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
+    )
+
+    try:
+
+        r = requests.get(url, timeout=5)
+
+        data = r.json()
+
+        weather = {
+
+            "temp": data["main"]["temp"],
+            "humidity": data["main"]["humidity"],
+            "wind": data["wind"]["speed"],
+            "condition": data["weather"][0]["main"],
+            "description": data["weather"][0]["description"],
+            "time": datetime.now().strftime("%H:%M %d/%m/%Y")
+        }
+
+        return weather
+
+    except:
+
+        return {
+
+            "temp": 28,
+            "humidity": 70,
+            "wind": 2,
+            "condition": "Unknown",
+            "description": "offline",
+            "time": datetime.now().strftime("%H:%M %d/%m/%Y")
+        }
+
+
+# ==========================================
+# DEFAULT WEATHER (KHI KHÔNG CÓ GPS)
+# ==========================================
+
+def get_default_weather():
+
+    return fetch_weather(DEFAULT_LAT, DEFAULT_LON)
+
+
+# ==========================================
+# DISEASE RISK CALCULATION
+# ==========================================
+
+def calculate_disease_risk(temp, humidity):
+
+    risk = humidity * 0.6 + temp * 0.3
+
+    if risk > 100:
+        risk = 100
+
+    if risk < 30:
+        level = "Thấp"
+
+    elif risk < 60:
+        level = "Trung bình"
+
+    elif risk < 80:
+        level = "Cao"
+
+    else:
+        level = "Rất cao"
+
+    return int(risk), level
+
+
+# ==========================================
+# WEATHER WARNINGS
+# ==========================================
+
+def get_weather_warnings(weather):
+
+    warnings = []
+
+    temp = weather["temp"]
+    humidity = weather["humidity"]
+
+    if temp > TEMP_WARNING:
+
+        warnings.append(
+            "Nhiệt độ quá cao, cây dễ mất nước."
+        )
+
+    if humidity > HUMIDITY_WARNING:
+
+        warnings.append(
+            "Độ ẩm cao, nguy cơ nấm bệnh."
+        )
+
+    if weather["wind"] > 10:
+
+        warnings.append(
+            "Gió mạnh, nên kiểm tra giàn cây."
+        )
+
+    return warnings
+
+
+# ==========================================
+# IRRIGATION ESTIMATION
+# ==========================================
+
+def estimate_water_need(base_water, temp):
+
+    water = base_water
+
+    if temp > HOT_TEMP:
+
+        water = base_water * WATER_INCREASE_RATIO
+
+    return int(water)
+
+
+# ==========================================
+# WEATHER SUMMARY
+# ==========================================
+
+def generate_weather_summary(weather):
+
+    temp = weather["temp"]
+    humidity = weather["humidity"]
+
+    summary = f"""
+Nhiệt độ: {temp}°C
+Độ ẩm: {humidity}%
+Gió: {weather['wind']} m/s
+Thời tiết: {weather['description']}
+"""
+
+    return summary
+
+
+# ==========================================
+# DAILY FARM ANALYSIS
+# ==========================================
+
+def farm_environment_analysis(weather):
+
+    temp = weather["temp"]
+    humidity = weather["humidity"]
+
+    analysis = []
+
+    if temp < 15:
+
+        analysis.append(
+            "Trời lạnh, cây sinh trưởng chậm."
+        )
+
+    if 20 <= temp <= 30:
+
+        analysis.append(
+            "Điều kiện nhiệt độ tốt cho cây phát triển."
+        )
+
+    if temp > 35:
+
+        analysis.append(
+            "Cần che nắng hoặc tưới mát cho cây."
+        )
+
+    if humidity > 80:
+
+        analysis.append(
+            "Nên kiểm tra nấm bệnh trên lá."
+        )
+
+    if humidity < 40:
+
+        analysis.append(
+            "Không khí khô, nên tăng tưới."
+        )
+
+    return analysis
+# ==========================================
+# AJI FARM AI - CROP DATABASE
+# ==========================================
+
+# Database kiến thức cây trồng
+# Mỗi cây gồm:
+# name
+# water_need (ml/ngày)
+# sunlight
+# soil
+# care
+# growth_days
+# fertilizer_schedule
+
+
+CROP_DB = {
+
+    # ======================================
+    # ỚT
+    # ======================================
+
+    "aji_charapita": {
+
+        "name": "Ớt Aji Charapita",
+
+        "water_need": 500,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất tơi xốp thoát nước tốt",
+
+        "care": "Không để úng, bấm ngọn khi cây 30cm",
+
+        "growth_days": 120,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ",
+            "20 ngày: NPK nhẹ",
+            "40 ngày: Kali cao"
+        ]
+    },
+
+    "chili": {
+
+        "name": "Ớt thường",
+
+        "water_need": 450,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất thịt nhẹ",
+
+        "care": "Bón phân định kỳ 15 ngày",
+
+        "growth_days": 100,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân chuồng",
+            "25 ngày: NPK",
+            "50 ngày: Kali"
+        ]
+    },
+
+    # ======================================
+    # RAU
+    # ======================================
+
+    "lettuce": {
+
+        "name": "Xà lách",
+
+        "water_need": 200,
+
+        "sunlight": "Nắng nhẹ",
+
+        "soil": "Đất giàu hữu cơ",
+
+        "care": "Giữ ẩm đất thường xuyên",
+
+        "growth_days": 35,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ",
+            "15 ngày: NPK loãng"
+        ]
+    },
+
+    "basil": {
+
+        "name": "Húng quế",
+
+        "water_need": 150,
+
+        "sunlight": "Nắng trung bình",
+
+        "soil": "Đất tơi xốp",
+
+        "care": "Ngắt hoa để kích lá",
+
+        "growth_days": 60,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân hữu cơ",
+            "20 ngày: NPK nhẹ"
+        ]
+    },
+
+    "spinach": {
+
+        "name": "Rau bina",
+
+        "water_need": 180,
+
+        "sunlight": "Nắng nhẹ",
+
+        "soil": "Đất giàu mùn",
+
+        "care": "Không để đất khô",
+
+        "growth_days": 40,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ"
+        ]
+    },
+
+    # ======================================
+    # CÂY ĂN TRÁI
+    # ======================================
+
+    "mango": {
+
+        "name": "Xoài",
+
+        "water_need": 1500,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất sâu",
+
+        "care": "Tỉa cành sau thu hoạch",
+
+        "growth_days": 365,
+
+        "fertilizer_schedule": [
+            "Đầu mùa mưa: phân hữu cơ",
+            "Ra hoa: NPK",
+            "Nuôi trái: Kali"
+        ]
+    },
+
+    "durian": {
+
+        "name": "Sầu riêng",
+
+        "water_need": 2000,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất sâu thoát nước",
+
+        "care": "Không để úng nước",
+
+        "growth_days": 365,
+
+        "fertilizer_schedule": [
+            "Đầu mùa mưa: phân chuồng",
+            "Ra hoa: NPK",
+            "Nuôi trái: Kali cao"
+        ]
+    },
+
+    "banana": {
+
+        "name": "Chuối",
+
+        "water_need": 1800,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất giàu hữu cơ",
+
+        "care": "Tỉa chồi phụ",
+
+        "growth_days": 300,
+
+        "fertilizer_schedule": [
+            "30 ngày: phân chuồng",
+            "60 ngày: NPK",
+            "Ra buồng: Kali"
+        ]
+    },
+
+    # ======================================
+    # CÂY PHỔ BIẾN
+    # ======================================
+
+    "tomato": {
+
+        "name": "Cà chua",
+
+        "water_need": 400,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất tơi xốp",
+
+        "care": "Làm giàn leo",
+
+        "growth_days": 90,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân hữu cơ",
+            "25 ngày: NPK",
+            "Ra hoa: Kali"
+        ]
+    },
+
+    "cucumber": {
+
+        "name": "Dưa leo",
+
+        "water_need": 350,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất giàu mùn",
+
+        "care": "Làm giàn",
+
+        "growth_days": 70,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân chuồng",
+            "20 ngày: NPK"
+        ]
+    }
+
+}
+# ==========================================
+# AJI FARM AI - CROP DATABASE
+# ==========================================
+
+# Database kiến thức cây trồng
+# Mỗi cây gồm:
+# name
+# water_need (ml/ngày)
+# sunlight
+# soil
+# care
+# growth_days
+# fertilizer_schedule
+
+
+CROP_DB = {
+
+    # ======================================
+    # ỚT
+    # ======================================
+
+    "aji_charapita": {
+
+        "name": "Ớt Aji Charapita",
+
+        "water_need": 500,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất tơi xốp thoát nước tốt",
+
+        "care": "Không để úng, bấm ngọn khi cây 30cm",
+
+        "growth_days": 120,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ",
+            "20 ngày: NPK nhẹ",
+            "40 ngày: Kali cao"
+        ]
+    },
+
+    "chili": {
+
+        "name": "Ớt thường",
+
+        "water_need": 450,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất thịt nhẹ",
+
+        "care": "Bón phân định kỳ 15 ngày",
+
+        "growth_days": 100,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân chuồng",
+            "25 ngày: NPK",
+            "50 ngày: Kali"
+        ]
+    },
+
+    # ======================================
+    # RAU
+    # ======================================
+
+    "lettuce": {
+
+        "name": "Xà lách",
+
+        "water_need": 200,
+
+        "sunlight": "Nắng nhẹ",
+
+        "soil": "Đất giàu hữu cơ",
+
+        "care": "Giữ ẩm đất thường xuyên",
+
+        "growth_days": 35,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ",
+            "15 ngày: NPK loãng"
+        ]
+    },
+
+    "basil": {
+
+        "name": "Húng quế",
+
+        "water_need": 150,
+
+        "sunlight": "Nắng trung bình",
+
+        "soil": "Đất tơi xốp",
+
+        "care": "Ngắt hoa để kích lá",
+
+        "growth_days": 60,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân hữu cơ",
+            "20 ngày: NPK nhẹ"
+        ]
+    },
+
+    "spinach": {
+
+        "name": "Rau bina",
+
+        "water_need": 180,
+
+        "sunlight": "Nắng nhẹ",
+
+        "soil": "Đất giàu mùn",
+
+        "care": "Không để đất khô",
+
+        "growth_days": 40,
+
+        "fertilizer_schedule": [
+            "7 ngày: phân hữu cơ"
+        ]
+    },
+
+    # ======================================
+    # CÂY ĂN TRÁI
+    # ======================================
+
+    "mango": {
+
+        "name": "Xoài",
+
+        "water_need": 1500,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất sâu",
+
+        "care": "Tỉa cành sau thu hoạch",
+
+        "growth_days": 365,
+
+        "fertilizer_schedule": [
+            "Đầu mùa mưa: phân hữu cơ",
+            "Ra hoa: NPK",
+            "Nuôi trái: Kali"
+        ]
+    },
+
+    "durian": {
+
+        "name": "Sầu riêng",
+
+        "water_need": 2000,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất sâu thoát nước",
+
+        "care": "Không để úng nước",
+
+        "growth_days": 365,
+
+        "fertilizer_schedule": [
+            "Đầu mùa mưa: phân chuồng",
+            "Ra hoa: NPK",
+            "Nuôi trái: Kali cao"
+        ]
+    },
+
+    "banana": {
+
+        "name": "Chuối",
+
+        "water_need": 1800,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất giàu hữu cơ",
+
+        "care": "Tỉa chồi phụ",
+
+        "growth_days": 300,
+
+        "fertilizer_schedule": [
+            "30 ngày: phân chuồng",
+            "60 ngày: NPK",
+            "Ra buồng: Kali"
+        ]
+    },
+
+    # ======================================
+    # CÂY PHỔ BIẾN
+    # ======================================
+
+    "tomato": {
+
+        "name": "Cà chua",
+
+        "water_need": 400,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất tơi xốp",
+
+        "care": "Làm giàn leo",
+
+        "growth_days": 90,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân hữu cơ",
+            "25 ngày: NPK",
+            "Ra hoa: Kali"
+        ]
+    },
+
+    "cucumber": {
+
+        "name": "Dưa leo",
+
+        "water_need": 350,
+
+        "sunlight": "Nắng mạnh",
+
+        "soil": "Đất giàu mùn",
+
+        "care": "Làm giàn",
+
+        "growth_days": 70,
+
+        "fertilizer_schedule": [
+            "10 ngày: phân chuồng",
+            "20 ngày: NPK"
+        ]
+    }
+
+}
+# ==========================================
+# AJI FARM AI - GEMINI PLANT DOCTOR
+# ==========================================
+
+import google.generativeai as genai
+import io
+from PIL import Image
+
+from config import GEMINI_MODEL
+from weather_system import generate_weather_summary
+from crop_database import get_crop_info
+
+
+# ==========================================
+# LOAD GEMINI MODEL
+# ==========================================
+
+def load_gemini(api_key):
+
+    try:
+
+        genai.configure(api_key=api_key)
+
+        model = genai.GenerativeModel(GEMINI_MODEL)
+
+        return model
+
+    except:
+
+        return None
+
+
+# ==========================================
+# CONVERT IMAGE TO BYTES
+# ==========================================
+
+def image_to_bytes(img):
+
+    buffer = io.BytesIO()
+
+    img.save(buffer, format="JPEG")
+
+    return buffer.getvalue()
+
+
+# ==========================================
+# BUILD AI PROMPT
+# ==========================================
+
+def build_prompt(crop_id, weather):
+
+    crop_info = get_crop_info(crop_id)
+
+    crop_name = crop_info["name"]
+
+    weather_text = generate_weather_summary(weather)
+
+    prompt = f"""
+Bạn là chuyên gia nông nghiệp.
+
+Thông tin cây:
+{crop_name}
+
+Điều kiện môi trường:
+{weather_text}
+
+Hãy phân tích ảnh lá cây và trả lời:
+
+1. Cây có bệnh gì không?
+2. Nếu có, bệnh gì?
+3. Mức độ nghiêm trọng
+4. Cách xử lý
+5. Ưu tiên giải pháp sinh học
+6. Nếu cần mới dùng thuốc hóa học
+
+Trả lời rõ ràng theo từng mục.
+"""
+
+    return prompt
+
+
+# ==========================================
+# AI DISEASE DIAGNOSIS
+# ==========================================
+
+def diagnose_plant(model, image, crop_id, weather):
+
+    try:
+
+        img_bytes = image_to_bytes(image)
+
+        prompt = build_prompt(crop_id, weather)
+
+        response = model.generate_content([
+
+            prompt,
+
+            {
+                "mime_type": "image/jpeg",
+                "data": img_bytes
+            }
+
+        ])
+
+        return response.text
+
+    except Exception as e:
+
+        return f"Lỗi AI: {e}"
+
+
+# ==========================================
+# QUICK DISEASE CHECK (TEXT ONLY)
+# ==========================================
+
+def quick_diagnosis(model, description):
+
+    prompt = f"""
+Triệu chứng cây trồng:
+
+{description}
+
+Hãy cho biết:
+
+- khả năng bệnh
+- cách xử lý nhanh
+"""
+
+    try:
+
+        response = model.generate_content(prompt)
+
+        return response.text
+
+    except:
+
+        return "Không thể phân tích."
+
+
+# ==========================================
+# FERTILIZER ADVISOR
+# ==========================================
+
+def fertilizer_advisor(model, crop_id, growth_stage):
+
+    crop = get_crop_info(crop_id)
+
+    prompt = f"""
+Cây trồng: {crop['name']}
+
+Giai đoạn: {growth_stage}
+
+Hãy tư vấn:
+
+- loại phân nên dùng
+- liều lượng
+- cách bón
+"""
+
+    try:
+
+        response = model.generate_content(prompt)
+
+        return response.text
+
+    except:
+
+        return "Không thể tư vấn phân bón."
+
+
+# ==========================================
+# FARM CONSULTANT CHAT
+# ==========================================
+
+def farm_chat(model, question):
+
+    prompt = f"""
+Bạn là chuyên gia nông nghiệp.
+
+Hãy trả lời câu hỏi sau:
+
+{question}
+"""
+
+    try:
+
+        response = model.generate_content(prompt)
+
+        return response.text
+
+    except:
+
+        return "AI không phản hồi."
+# ==========================================
+# AJI FARM AI - DASHBOARD UI
+# ==========================================
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+from database import get_plants
+from weather_system import (
+    fetch_weather,
+    calculate_disease_risk,
+    get_weather_warnings,
+    farm_environment_analysis
+)
+
+from crop_database import get_crop_name
+
+
+# ==========================================
+# DASHBOARD HEADER
+# ==========================================
+
+def dashboard_header(lat, lon):
+
+    st.title("🌶 Aji Farm AI")
+
+    st.markdown(
+        f"📍 Vị trí vườn: `{lat} , {lon}`"
+    )
+
+    st.caption(
+        f"Cập nhật: {datetime.now().strftime('%H:%M %d/%m/%Y')}"
+    )
+
+
+# ==========================================
+# WEATHER METRICS
+# ==========================================
+
+def weather_metrics(weather):
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "🌡 Nhiệt độ",
+        f"{weather['temp']}°C"
+    )
+
+    col2.metric(
+        "💧 Độ ẩm",
+        f"{weather['humidity']}%"
+    )
+
+    col3.metric(
+        "🌬 Gió",
+        f"{weather['wind']} m/s"
+    )
+
+    risk, level = calculate_disease_risk(
+        weather["temp"],
+        weather["humidity"]
+    )
+
+    col4.metric(
+        "🦠 Nguy cơ bệnh",
+        f"{risk}% ({level})"
+    )
+
+
+# ==========================================
+# WEATHER WARNINGS
+# ==========================================
+
+def weather_warning_panel(weather):
+
+    warnings = get_weather_warnings(weather)
+
+    if warnings:
+
+        st.subheader("⚠ Cảnh báo thời tiết")
+
+        for w in warnings:
+
+            st.warning(w)
+
+
+# ==========================================
+# FARM ANALYSIS PANEL
+# ==========================================
+
+def environment_analysis_panel(weather):
+
+    analysis = farm_environment_analysis(weather)
+
+    if analysis:
+
+        st.subheader("🔎 Phân tích môi trường")
+
+        for a in analysis:
+
+            st.info(a)
+
+
+# ==========================================
+# FARM STATISTICS
+# ==========================================
+
+def farm_statistics(data):
+
+    plants = get_plants(data)
+
+    st.subheader("🌱 Thống kê vườn")
+
+    total = len(plants)
+
+    st.metric("Tổng số cây", total)
+
+    if total == 0:
+
+        st.info("Chưa có cây trong hệ thống.")
+
+        return
+
+    crop_names = []
+
+    for p in plants:
+
+        crop_names.append(
+            get_crop_name(p["crop"])
+        )
+
+    df = pd.DataFrame({
+        "Crop": crop_names
+    })
+
+    counts = df["Crop"].value_counts()
+
+    st.bar_chart(counts)
+
+
+# ==========================================
+# FARM LIST TABLE
+# ==========================================
+
+def farm_table(data):
+
+    plants = get_plants(data)
+
+    if not plants:
+
+        return
+
+    rows = []
+
+    for p in plants:
+
+        rows.append({
+
+            "Tên cây": get_crop_name(p["crop"]),
+
+            "Ngày trồng": p["date"]
+        })
+
+    df = pd.DataFrame(rows)
+
+    st.subheader("📋 Danh sách cây")
+
+    st.dataframe(df, use_container_width=True)
+
+
+# ==========================================
+# DAILY TASK PANEL
+# ==========================================
+
+def daily_tasks(weather):
+
+    st.subheader("📅 Công việc hôm nay")
+
+    temp = weather["temp"]
+
+    humidity = weather["humidity"]
+
+    st.checkbox(
+        "💧 Tưới nước",
+        value=temp > 25
+    )
+
+    st.checkbox(
+        "🌿 Bón phân lá",
+        value=temp < 30
+    )
+
+    st.checkbox(
+        "🦠 Kiểm tra sâu bệnh",
+        value=humidity > 70
+    )
+
+    st.checkbox(
+        "🧹 Dọn cỏ quanh gốc"
+    )
+
+
+# ==========================================
+# MAIN DASHBOARD FUNCTION
+# ==========================================
+
+def show_dashboard(data, lat, lon):
+
+    dashboard_header(lat, lon)
+
+    weather = fetch_weather(lat, lon)
+
+    st.divider()
+
+    weather_metrics(weather)
+
+    st.divider()
+
+    weather_warning_panel(weather)
+
+    environment_analysis_panel(weather)
+
+    st.divider()
+
+    farm_statistics(data)
+
+    farm_table(data)
+
+    st.divider()
+
+    daily_tasks(weather)
+# ==========================================
+# AJI FARM AI - GARDEN MANAGER
+# ==========================================
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime, date
+
+from database import (
+    add_plant,
+    get_plants,
+    delete_plant,
+    save_data
+)
+
+from crop_database import (
+    get_crop_list,
+    get_crop_name,
+    get_crop_water_need
+)
+
+
+# ==========================================
+# CALCULATE PLANT AGE
+# ==========================================
+
+def calculate_age(plant_date):
+
+    try:
+
+        d = datetime.strptime(plant_date, "%Y-%m-%d").date()
+
+        today = date.today()
+
+        age = (today - d).days
+
+        return age
+
+    except:
+
+        return 0
+
+
+# ==========================================
+# ADD PLANT FORM
+# ==========================================
+
+def add_plant_form(data):
+
+    st.subheader("🌱 Thêm cây mới")
+
+    crops = get_crop_list()
+
+    crop_names = [c["name"] for c in crops]
+
+    crop_select = st.selectbox(
+        "Chọn loại cây",
+        crop_names
+    )
+
+    plant_date = st.date_input(
+        "Ngày trồng",
+        value=date.today()
+    )
+
+    note = st.text_input(
+        "Ghi chú"
+    )
+
+    if st.button("➕ Thêm cây"):
+
+        crop_id = None
+
+        for c in crops:
+
+            if c["name"] == crop_select:
+
+                crop_id = c["id"]
+
+        plant = {
+
+            "crop": crop_id,
+
+            "date": plant_date.strftime("%Y-%m-%d"),
+
+            "note": note
+
+        }
+
+        add_plant(data, plant)
+
+        save_data(data)
+
+        st.success("Đã thêm cây.")
+
+
+# ==========================================
+# PLANT LIST
+# ==========================================
+
+def plant_list(data):
+
+    plants = get_plants(data)
+
+    if not plants:
+
+        st.info("Chưa có cây.")
+
+        return
+
+    rows = []
+
+    for i, p in enumerate(plants):
+
+        crop_name = get_crop_name(p["crop"])
+
+        age = calculate_age(p["date"])
+
+        water = get_crop_water_need(p["crop"])
+
+        rows.append({
+
+            "ID": i,
+
+            "Tên cây": crop_name,
+
+            "Ngày trồng": p["date"],
+
+            "Tuổi (ngày)": age,
+
+            "Nhu cầu nước": water,
+
+            "Ghi chú": p.get("note", "")
+        })
+
+    df = pd.DataFrame(rows)
+
+    st.subheader("📋 Danh sách cây")
+
+    st.dataframe(df, use_container_width=True)
+
+
+# ==========================================
+# DELETE PLANT
+# ==========================================
+
+def delete_plant_panel(data):
+
+    plants = get_plants(data)
+
+    if not plants:
+
+        return
+
+    st.subheader("🗑 Xóa cây")
+
+    options = []
+
+    for i, p in enumerate(plants):
+
+        name = get_crop_name(p["crop"])
+
+        options.append(f"{i} - {name}")
+
+    selected = st.selectbox(
+        "Chọn cây cần xóa",
+        options
+    )
+
+    if st.button("❌ Xóa"):
+
+        plant_id = int(selected.split(" - ")[0])
+
+        delete_plant(data, plant_id)
+
+        save_data(data)
+
+        st.success("Đã xóa cây.")
+
+
+# ==========================================
+# CARE ADVICE
+# ==========================================
+
+def care_advice(data):
+
+    plants = get_plants(data)
+
+    if not plants:
+
+        return
+
+    st.subheader("🌿 Gợi ý chăm sóc")
+
+    for p in plants:
+
+        name = get_crop_name(p["crop"])
+
+        age = calculate_age(p["date"])
+
+        water = get_crop_water_need(p["crop"])
+
+        st.markdown(f"""
+**{name}**
+
+- Tuổi: {age} ngày
+- Nhu cầu nước: {water}
+""")
+
+        if age < 7:
+
+            st.info("Cây còn non, cần tưới nhẹ mỗi ngày.")
+
+        elif age < 30:
+
+            st.info("Giai đoạn sinh trưởng mạnh, cần bổ sung phân.")
+
+        else:
+
+            st.info("Chuẩn bị giai đoạn ra hoa hoặc thu hoạch.")
+
+
+# ==========================================
+# MAIN UI
+# ==========================================
+
+def show_garden_manager(data):
+
+    st.title("🌱 Quản lý vườn")
+
+    tab1, tab2, tab3 = st.tabs([
+        "Thêm cây",
+        "Danh sách",
+        "Chăm sóc"
+    ])
+
+    with tab1:
+
+        add_plant_form(data)
+
+    with tab2:
+
+        plant_list(data)
+
+        delete_plant_panel(data)
+
+    with tab3:
+
+        care_advice(data)
+# ==========================================
+# AJI FARM AI - MAIN APPLICATION
+# ==========================================
+
+import streamlit as st
 from streamlit_js_eval import get_geolocation
 
-# =====================================================
-# CONFIG
-# =====================================================
+from config import APP_NAME
+from database import load_data
+from dashboard import show_dashboard
+from garden_manager import show_garden_manager
+from gemini_ai import load_gemini, diagnose_plant
+from npk_ai import recommend_npk
+
+from PIL import Image
+
+
+# ==========================================
+# PAGE CONFIG
+# ==========================================
 
 st.set_page_config(
-    page_title="Aji Farm AI",
+    page_title=APP_NAME,
     page_icon="🌶",
     layout="wide"
 )
 
-DATA_FILE="aji_farm_db.json"
-WEATHER_KEY="66ad043d6024749fa4bf92f0a6782397"
 
-# =====================================================
-# LOAD AI GEMINI
-# =====================================================
+# ==========================================
+# LOAD DATABASE
+# ==========================================
 
-@st.cache_resource
-def load_ai():
-    try:
-        GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
-        genai.configure(api_key=GEMINI_KEY)
-        return genai.GenerativeModel("gemini-1.5-flash")
-    except:
-        return None
+data = load_data()
 
-ai_model = load_ai()
 
-# =====================================================
-# DATABASE
-# =====================================================
+# ==========================================
+# SIDEBAR MENU
+# ==========================================
 
-INIT_DATA={
-    "plants":[],
-    "disease_logs":[],
-    "chat":[],
-    "inventory":{"fertilizer":100,"pesticide":100}
-}
+st.sidebar.title("🌶 Aji Farm AI")
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE,"r",encoding="utf-8") as f:
-            return json.load(f)
-    return copy.deepcopy(INIT_DATA)
+menu = st.sidebar.radio(
 
-def save():
-    with open(DATA_FILE,"w",encoding="utf-8") as f:
-        json.dump(st.session_state.data,f,ensure_ascii=False,indent=2)
+    "Chọn chức năng",
 
-if "data" not in st.session_state:
-    st.session_state.data=load_data()
+    [
 
-# =====================================================
-# CROP DATABASE
-# =====================================================
+        "🏠 Tổng quan",
+        "🌱 Quản lý vườn",
+        "🦠 AI chẩn đoán bệnh",
+        "🌿 Tư vấn phân bón"
 
-CROP_DB={
-    "aji_charapita":{"name":"Ớt Aji Charapita","water":500,"care":"Nắng mạnh, đất thoát nước tốt"},
-    "tomato":{"name":"Cà chua","water":450,"care":"Cần giàn leo, tỉa chồi"},
-    "lettuce":{"name":"Xà lách","water":200,"care":"Ưa mát"},
-    "durian":{"name":"Sầu riêng","water":2000,"care":"Đất sâu"},
-    "mango":{"name":"Xoài","water":1500,"care":"Phòng rầy bông"},
-    "basil":{"name":"Húng quế","water":150,"care":"Ngắt hoa kích lá"}
-}
+    ]
 
-# =====================================================
-# GPS WEATHER
-# =====================================================
+)
 
-@st.cache_data(ttl=600)
-def get_weather(lat,lon):
-    try:
-        url=f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_KEY}&units=metric"
-        r=requests.get(url)
-        w=r.json()
 
-        return{
-            "temp":w["main"]["temp"],
-            "hum":w["main"]["humidity"],
-            "wind":w["wind"]["speed"]
-        }
-    except:
-        return {"temp":28,"hum":70,"wind":2}
+# ==========================================
+# GET LOCATION
+# ==========================================
 
-geo=get_geolocation()
+geo = get_geolocation()
 
-if geo:
-    w_info=get_weather(geo["coords"]["latitude"],geo["coords"]["longitude"])
+if geo and "coords" in geo:
+
+    lat = geo["coords"]["latitude"]
+
+    lon = geo["coords"]["longitude"]
+
 else:
-    w_info={"temp":28,"hum":70,"wind":2}
 
-# =====================================================
-# AI NPK LOCAL (KHÔNG GEMINI)
-# =====================================================
+    lat = 16.47
+    lon = 107.58
 
-def analyze_npk(img):
 
-    arr=np.array(img)
+# ==========================================
+# MENU: DASHBOARD
+# ==========================================
 
-    r=arr[:,:,0].mean()
-    g=arr[:,:,1].mean()
-    b=arr[:,:,2].mean()
+if menu == "🏠 Tổng quan":
 
-    result=[]
+    show_dashboard(data, lat, lon)
 
-    if g < r*0.9:
-        result.append("Thiếu Nitrogen (N) → lá vàng")
 
-    if b > g*0.8:
-        result.append("Thiếu Phosphorus (P) → lá sẫm")
+# ==========================================
+# MENU: GARDEN MANAGER
+# ==========================================
 
-    if r > g*1.2:
-        result.append("Thiếu Potassium (K) → cháy mép lá")
+elif menu == "🌱 Quản lý vườn":
 
-    if not result:
-        result.append("Lá bình thường")
+    show_garden_manager(data)
 
-    return result
 
-# =====================================================
-# DASHBOARD
-# =====================================================
+# ==========================================
+# MENU: AI DIAGNOSIS
+# ==========================================
 
-st.title("🌶 AJI FARM AI")
+elif menu == "🦠 AI chẩn đoán bệnh":
 
-tab1,tab2,tab3=st.tabs([
-    "🌤 Tổng quan",
-    "🌱 Vườn cây",
-    "📷 Bác sĩ AI"
-])
+    st.title("🦠 AI Bác sĩ cây trồng")
 
-# =====================================================
-# TAB 1
-# =====================================================
+    api_key = st.text_input(
+        "Gemini API Key",
+        type="password"
+    )
 
-with tab1:
+    if api_key:
 
-    c1,c2,c3=st.columns(3)
+        model = load_gemini(api_key)
 
-    c1.metric("🌡 Nhiệt độ",f"{w_info['temp']}°C")
-    c2.metric("💧 Độ ẩm",f"{w_info['hum']}%")
-    c3.metric("🌬 Gió",f"{w_info['wind']} m/s")
-
-    risk=min((w_info["hum"]*0.6 + w_info["temp"]*0.3),100)
-
-    st.metric("🦠 Nguy cơ sâu bệnh",f"{int(risk)}%")
-
-    if w_info["hum"]>80 and w_info["temp"]>26:
-
-        st.error("""
-Nguy cơ cao:
-• Bọ trĩ
-• Nấm phấn trắng
-
-Nguyên nhân:
-• độ ẩm cao
-• lá rậm
-
-Xử lý:
-Sinh học: neem oil
-
-Hóa học: Abamectin
-""")
-
-# =====================================================
-# TAB 2
-# =====================================================
-
-with tab2:
-
-    st.subheader("🌱 Thêm cây")
-
-    with st.form("addplant"):
-
-        col1,col2=st.columns(2)
-
-        crop=col1.selectbox(
-            "Loại cây",
-            list(CROP_DB.keys()),
-            format_func=lambda x:CROP_DB[x]["name"]
+        crop = st.text_input(
+            "Tên cây"
         )
 
-        plant_date=col2.date_input("Ngày trồng",date.today())
+        image = st.file_uploader(
+            "Tải ảnh lá cây",
+            type=["jpg", "png"]
+        )
 
-        if st.form_submit_button("➕ Thêm cây"):
+        if image and crop:
 
-            st.session_state.data["plants"].append({
-                "crop":crop,
-                "date":str(plant_date)
-            })
+            img = Image.open(image)
 
-            save()
-            st.rerun()
+            st.image(img, width=300)
 
-    st.divider()
+            if st.button("🔍 Phân tích"):
 
-    st.subheader("🌿 Danh sách cây")
+                with st.spinner("AI đang phân tích..."):
 
-    if st.session_state.data["plants"]:
+                    result = diagnose_plant(
 
-        df=pd.DataFrame(st.session_state.data["plants"])
+                        model,
+                        img,
+                        crop,
+                        {
+                            "temp": 30,
+                            "humidity": 75
+                        }
 
-        df["Tên"]=df["crop"].map(lambda x:CROP_DB[x]["name"])
-
-        df["date"]=pd.to_datetime(df["date"],errors="coerce")
-
-        df["Tuổi cây"]=(datetime.now()-df["date"]).dt.days
-
-        st.dataframe(df[["Tên","date","Tuổi cây"]])
-
-# =====================================================
-# TAB 3
-# =====================================================
-
-with tab3:
-
-    st.subheader("📷 AI nhận diện bệnh")
-
-    cam=st.camera_input("Chụp lá cây")
-
-    if cam:
-
-        img=ImageOps.exif_transpose(Image.open(cam)).convert("RGB")
-
-        st.image(img,width=350)
-
-        st.subheader("🌿 Phân tích NPK (AI local)")
-
-        result=analyze_npk(img)
-
-        for r in result:
-            st.warning(r)
-
-        if st.button("AI phân tích bệnh"):
-
-            if ai_model:
-
-                with st.spinner("Đang hỏi ý kiến chuyên gia AI..."):
-
-                    buf=io.BytesIO()
-                    img.save(buf,format="JPEG")
-
-                    prompt=f"""
-Bạn là chuyên gia bệnh cây.
-
-Thông tin môi trường:
-Nhiệt độ {w_info['temp']}°C
-Độ ẩm {w_info['hum']}%
-
-Dựa vào ảnh hãy:
-
-1. Chẩn đoán bệnh
-2. Đánh giá mức độ
-3. Đưa hướng xử lý sinh học
-4. Đưa hướng xử lý hóa học
-"""
-
-                    res=ai_model.generate_content(
-                        [prompt,{
-                            "mime_type":"image/jpeg",
-                            "data":buf.getvalue()
-                        }],
-                        generation_config={"max_output_tokens":600}
                     )
 
-                    st.success("Kết quả AI")
-                    st.write(res.text)
+                    st.markdown(result)
 
-# =====================================================
-# AI CHAT
-# =====================================================
 
-st.divider()
-st.subheader("🤖 Trợ lý nông nghiệp")
+# ==========================================
+# MENU: NPK ADVISOR
+# ==========================================
 
-for c in st.session_state.data["chat"][-3:]:
+elif menu == "🌿 Tư vấn phân bón":
 
-    with st.chat_message("user"):
-        st.write(c["q"])
+    st.title("🌿 AI tư vấn phân bón")
 
-    with st.chat_message("assistant"):
-        st.write(c["a"])
+    crop = st.text_input("Tên cây")
 
-q=st.chat_input("Hỏi về sâu bệnh, phân bón...")
+    stage = st.selectbox(
 
-if q and ai_model:
+        "Giai đoạn",
 
-    with st.spinner("AI đang suy nghĩ..."):
+        [
 
-        res=ai_model.generate_content(
-            f"Bạn là chuyên gia nông nghiệp. Trả lời dễ hiểu cho nông dân: {q}",
-            generation_config={"max_output_tokens":400}
+            "Cây con",
+            "Sinh trưởng",
+            "Ra hoa",
+            "Đậu trái"
+
+        ]
+
+    )
+
+    if st.button("📊 Phân tích"):
+
+        result = recommend_npk(
+
+            crop,
+            stage
+
         )
 
-    st.session_state.data["chat"].append({
-        "q":q,
-        "a":res.text
-    })
+        st.success(result)
 
-    save()
-    st.rerun()
-
-# =====================================================
-# SIDEBAR
-# =====================================================
-
-with st.sidebar:
-
-    st.header("⚙ Quản lý vật tư")
-
-    inv=st.session_state.data["inventory"]
-
-    st.write(f"Thuốc BVTV: {inv['pesticide']}%")
-    st.write(f"Phân bón: {inv['fertilizer']}%")
-
-    if st.button("Nạp đầy kho"):
-
-        st.session_state.data["inventory"]={
-            "fertilizer":100,
-            "pesticide":100
-        }
-
-        save()
-        st.rerun()
 
 
 
