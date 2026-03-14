@@ -1196,7 +1196,7 @@ from weather_system import (
     farm_environment_analysis
 )
 
-from crop_database import get_crop_name
+
 
 
 # ==========================================
