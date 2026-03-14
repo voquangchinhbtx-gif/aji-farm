@@ -997,7 +997,7 @@ from PIL import Image
 
 from config import GEMINI_MODEL
 from weather_system import generate_weather_summary
-from crop_database import get_crop_info
+
 
 
 # ==========================================
